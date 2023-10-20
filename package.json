@@ -1,0 +1,21 @@
+{
+  "name": "namumark-clone-2",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "compile": "tsc -w",
+    "output": "node out/main",
+    "start": "npm run build:live",
+    "build": "tsc -p .",
+    "build:live": "nodemon --watch \"src/**\" --ext \"ts\" --ignore \"src/**/*.spec.ts\" --exec \"ts-node src/main.ts\""
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^20.8.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
