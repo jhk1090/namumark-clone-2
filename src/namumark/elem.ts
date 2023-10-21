@@ -43,9 +43,9 @@ export class HeadingElem extends AbleChild {
 }
 
 export class MacroElem extends UnableChild {
-    value: string = "";
+    value: string | null = null;
     name: string = "";
-    constructor(value: string, name: string, range: Range) {
+    constructor(value: string | null, name: string, range: Range) {
         super(range);
         this.value = value;
         this.name = name;
@@ -89,10 +89,6 @@ export class MacroElem extends UnableChild {
                     default:
                         break;
                 }
-            }
-
-            if (elem instanceof MacroElem) {
-                continue;
             }
 
             if (!flag.isSkippable && !flag.isBroken) temp.push(elem);

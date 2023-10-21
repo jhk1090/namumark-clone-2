@@ -54,22 +54,27 @@ export class NamuMark {
     }
 
     processMacro() {
-        const macroRegex = /\[(?<name>[^[(\]]+)\((?<value>[^\)\]]+)\)\]/g;
-        const macroNoargValidNameRegex = /(clearfix|date|datetime|목차|tableofcontents|각주|footnote|br|pagecount)/g
-        const validMacroName = ["anchor", "age", "dday", "youtube", "kakaotv", "nicovideo", "vimeo", "navertv", "pagecount", "math"]
-        type groupType = Record<"name" | "value", string>;
+        const macroRegex = /\[(?<name>[^[(\]]+)(?<argument>\((?<value>[^\)\]]+)?\))?\]/g;
+        const validNoargMacroName = ["clearfix", "date", "datetime", "목차", "tableofcontents", "각주", "footnote", "br", "pagecount"]
+        const validMacroName = ["anchor", "age", "dday", "youtube", "kakaotv", "nicovideo", "vimeo", "navertv", "pagecount", "math", "include"]
+        type groupType = Record<"name" | "argument" | "value", string>;
         let match;
 
         while ((match = macroRegex.exec(this.wikiText)) !== null) {
             const _groups = match.groups as groupType;
             const macroName = _groups["name"].toLowerCase();
-            if (!(validMacroName.includes(macroName))) {
+            const macroArgument = _groups["argument"] ?? "";
+            if (macroArgument === "" && !(validNoargMacroName.includes(macroName))) {
                 continue;
             }
-            const macroValue = _groups["value"];
+            if (macroArgument !== "" && !(validMacroName.includes(macroName))) {
+                continue;
+            }
+            const macroValue = _groups["value"] ?? null;
             const range = new Range(match.index - 1, macroRegex.lastIndex - 1);
             this.tempArray.push(new MacroElem(macroValue, macroName, range));
         }
+
         console.log(this.wikiArray)
         console.log(this.tempArray)
         this.processTempArray();
