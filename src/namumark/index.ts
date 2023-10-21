@@ -1,4 +1,4 @@
-import { Elem, HeadingElem, MacroElem, RedirectElem } from "./elem";
+import { Elem, HeadingElem, LinkElem, MacroElem, RedirectElem, ULinkElem } from "./elem";
 import { Range } from "./utils";
 
 export class NamuMark {
@@ -6,7 +6,7 @@ export class NamuMark {
     isRedirect: boolean = false;
     wikiArray: Elem[] = [];
     tempArray: Elem[] = [];
-    headingLevel: number[] = [0, 0, 0, 0, 0, 0];
+    headingLevelAt: number[] = [0, 0, 0, 0, 0, 0];
 
     constructor(wikiText: string) {
         // \n는 regex 방지용
@@ -42,27 +42,27 @@ export class NamuMark {
                 continue;
             }
 
-            this.headingLevel[headingLevel - 1] += 1
-            this.headingLevel.fill(0, headingLevel)
-            const range = new Range(match.index - 1, headingRegex.lastIndex - 1);
-            const availableRange = new Range(range.start + (headingLevel + 2), range.end - (headingLevel + 2));
+            this.headingLevelAt[headingLevel - 1] += 1
+            this.headingLevelAt.fill(0, headingLevel)
+            const range = new Range(match.index + 1, headingRegex.lastIndex - 1);
+            const availableRange = new Range(range.start + (headingLevel + 1), range.end - (headingLevel + 1));
             const splitedInner = inner.split(" ")
             const value = splitedInner.slice(1, splitedInner.length - 1).join(" ");
 
-            this.wikiArray.push(new HeadingElem(value, range, availableRange, headingLevel, [...this.headingLevel]));
+            this.wikiArray.push(new HeadingElem(value, range, availableRange, headingLevel, [...this.headingLevelAt]));
         }
     }
 
     processMacro() {
-        const macroRegex = /\[(?<name>[^[(\]]+)(?<argument>\((?<value>[^\)\]]+)?\))?\]/g;
+        const macroRegex = /\[(?<name>[^[(\]]+)(?<argument>\((?<value>(?:(?!\)\])[^])+)?\))?\]/g;
         const validNoargMacroName = ["clearfix", "date", "datetime", "목차", "tableofcontents", "각주", "footnote", "br", "pagecount"]
         const validMacroName = ["anchor", "age", "dday", "youtube", "kakaotv", "nicovideo", "vimeo", "navertv", "pagecount", "math", "include"]
-        type groupType = Record<"name" | "argument" | "value", string>;
+        type groupType = Record<"name" | "argument" | "value", string | undefined>;
         let match;
 
         while ((match = macroRegex.exec(this.wikiText)) !== null) {
             const _groups = match.groups as groupType;
-            const macroName = _groups["name"].toLowerCase();
+            const macroName = (_groups["name"] as string).toLowerCase();
             const macroArgument = _groups["argument"] ?? "";
             if (macroArgument === "" && !(validNoargMacroName.includes(macroName))) {
                 continue;
@@ -71,15 +71,40 @@ export class NamuMark {
                 continue;
             }
             const macroValue = _groups["value"] ?? null;
-            const range = new Range(match.index - 1, macroRegex.lastIndex - 1);
+            const range = new Range(match.index, macroRegex.lastIndex);
             this.tempArray.push(new MacroElem(macroValue, macroName, range));
         }
 
-        console.log(this.wikiArray)
-        console.log(this.tempArray)
         this.processTempArray();
     }
 
+    processLink() {
+        const linkRegex = /\[\[(?<linkTo>(?:(?!\[\[|\]\]|\||<|>).)+)(?:\|(?<displayAs>(?:(?!\[\[|\]\]|\|).)+)?)?\]\]/g;
+        type groupType = Record<"linkTo" | "displayAs", string | undefined>;
+        let match;
+
+        while ((match = linkRegex.exec(this.wikiText)) !== null) {
+            const _groups = match.groups as groupType;
+            const linkTo = _groups["linkTo"] as string
+            const displayAs = _groups["displayAs"] ?? null;
+            const range = new Range(match.index, linkRegex.lastIndex);
+            if (displayAs === null) {
+                this.tempArray.push(new ULinkElem(linkTo, range));
+            } else {
+                const splitedFull = match[0].split("|");
+                const preceded = splitedFull[0];
+                const followed = "]]"
+                // [[asdf|asdf]]
+                const availableRange = new Range(range.start + preceded.length + 1, range.end - followed.length)
+                this.tempArray.push(displayAs === null ? new ULinkElem(linkTo, range) : new LinkElem(linkTo, displayAs, range, availableRange))
+            }
+        }
+
+        console.log(this.wikiArray);
+        console.log(this.tempArray);
+        this.processTempArray();
+    }
+    
     processTempArray() {
         for (const tempElem of this.tempArray) {
             this.wikiArray = tempElem.flushArr(this.wikiArray)
@@ -97,10 +122,12 @@ export class NamuMark {
         if (this.isRedirect === false) {
             this.processHeading();
             this.processMacro();
+            this.processLink();
         }
 
-        console.log("========================")
+        console.log("asdf ====================================== asdf")
         console.log(this.wikiArray)
+
         return `<!DOCTYPE html>
         <html>
         <head>

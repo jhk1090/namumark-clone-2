@@ -68,6 +68,7 @@ export class MacroElem extends UnableChild {
             if (elem instanceof HeadingElem) {
                 const {status, common} = elem.range.compare(this.range);
                 switch (status) {
+                    // == [macro()] ==
                     case "CONTAIN":
                         const {status: substatus, common: subcommon} = elem.availableRange.compare(common as Range);
                         if (substatus === "CONTAIN" || substatus === "SAME") {
@@ -77,15 +78,27 @@ export class MacroElem extends UnableChild {
                         }
                         flag.isBroken = true;
                         break;
+                    /* 
+                    [macro(
+                    == heading ==
+                    )] */
                     case "REVERSE_CONTAIN":
-                    case "OVERLAP":
                         flag.isSkippable = true;
                         break;
-                    case "SAME":
-                        flag.isError = false;
-                        flag.isBroken = true;
+                    /* 
+                    [macro(hello
+                    == )] ==
+                    == [macro(hello ==
+                    )]
+                    */
+                    case "OVERLAP":
+                        if (this.range.start < elem.range.start) {
+                            flag.isSkippable = true;
+                        } else {
+                            flag.isError = true;
+                            flag.isBroken = true;
+                        }
                         break;
-                    case "NONE":
                     default:
                         break;
                 }
@@ -96,6 +109,177 @@ export class MacroElem extends UnableChild {
                 temp.push(...array.slice(idx))
                 break
             };
+        }
+
+        if (!flag.isError) temp.push(this);
+        array = temp;
+        return array;
+    }
+}
+
+export class LinkElem extends AbleChild {
+    linkTo: string = "";
+    displayAs: string = "";
+    availableRange: Range = new Range(0, 1);
+    constructor(linkTo: string, displayAs: string, range: Range, availableRange: Range) {
+        super(range);
+        this.linkTo = linkTo;
+        this.displayAs = displayAs;
+        this.availableRange = availableRange;
+    }
+    override flushArr(array: Elem[]): Elem[] {
+        const flag = {
+            isBroken: false,
+            isError: false,
+            isSkippable: false
+        }
+        const temp = [];
+        for (const [idx, elem] of array.entries()) {
+            flag.isSkippable = false;
+
+            if (elem.range.start > this.range.end) {
+                temp.push(...array.slice(idx))
+                break;
+            }
+
+            if (elem instanceof HeadingElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // == [[]] ==
+                    case "CONTAIN": {
+                        const { status: substatus, common: subcommon } = elem.availableRange.compare(common as Range);
+                        if (substatus === "CONTAIN" || substatus === "SAME") {
+                            elem.pushChildren(this);
+                        } else {
+                            flag.isError = true;
+                        }
+                        flag.isBroken = true;
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            if (elem instanceof MacroElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // [macro([[]])]
+                    case "CONTAIN":
+                        flag.isError = true;
+                        flag.isBroken = true;
+                        break;
+                    // [[ [macro()] ]]
+                    // [[ text | [macro()] ]]
+                    // [[ text [macro( | )] ]]
+                    case "REVERSE_CONTAIN":
+                        const {status: substatus, common: subcommon} = this.availableRange.compare(common as Range);
+                        if (substatus === "CONTAIN" || substatus === "SAME") {
+                            this.pushChildren(elem);
+                        }
+                        flag.isSkippable = true;
+                        break;
+
+                    // [[ [macro( ]] )]
+                    // [macro( [[ )] ]]
+                    case "OVERLAP":
+                        if (this.range.start < elem.range.start) {
+                            flag.isSkippable = true;
+                        } else {
+                            flag.isError = true;
+                            flag.isBroken = true;
+                        }
+                    default:
+                        break;
+                }
+            }
+
+            if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
+            if (flag.isBroken) {
+                temp.push(...array.slice(idx))
+                break
+            }
+        }
+
+        if (!flag.isError) temp.push(this);
+        array = temp;
+        return array;
+    }
+}
+
+export class ULinkElem extends UnableChild {
+    linkTo: string = "";
+    constructor(linkTo: string, range: Range) {
+        super(range);
+        this.linkTo = linkTo;
+    }
+
+    override flushArr(array: Elem[]): Elem[] {
+        const flag = {
+            isBroken: false,
+            isError: false,
+            isSkippable: false
+        }
+        const temp = [];
+        for (const [idx, elem] of array.entries()) {
+            flag.isSkippable = false;
+
+            if (elem.range.start > this.range.end) {
+                temp.push(...array.slice(idx));
+                break;
+            }
+
+            if (elem instanceof HeadingElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // == [[]] ==
+                    case "CONTAIN": {
+                        const { status: substatus, common: subcommon } = elem.availableRange.compare(common as Range);
+                        if (substatus === "CONTAIN" || substatus === "SAME") {
+                            elem.pushChildren(this);
+                        } else {
+                            flag.isError = true;
+                        }
+                        flag.isBroken = true;
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+
+            if (elem instanceof MacroElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // [macro([[]])]
+                    case "CONTAIN":
+                        flag.isError = true;
+                        flag.isBroken = true;
+                        break;
+                    // [[ [macro()] ]]
+                    case "REVERSE_CONTAIN":
+                        flag.isSkippable = true;
+                        break;
+
+                    // [[ [macro( ]] )]
+                    // [macro( [[ )] ]]
+                    case "OVERLAP":
+                        if (this.range.start < elem.range.start) {
+                            flag.isSkippable = true;
+                        } else {
+                            flag.isError = true;
+                            flag.isBroken = true;
+                        }
+                    default:
+                        break;
+                }
+            }
+
+            if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
+            if (flag.isBroken) {
+                temp.push(...array.slice(idx))
+                break
+            }
         }
 
         if (!flag.isError) temp.push(this);

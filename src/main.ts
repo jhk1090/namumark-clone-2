@@ -2,7 +2,9 @@ import { NamuMark } from  "./namumark";
 import { writeFileSync } from "node:fs";
 import { Range } from "./namumark/utils";
 
-const text = `[[분류:나무위키의 도움말]]
+const text = `
+[[ [anchor( | )] ]]`
+const text1 = `[[분류:나무위키의 도움말]]
 [include(틀:나무위키)]
 [include(틀:나무위키 도움말)]
 [목차]
