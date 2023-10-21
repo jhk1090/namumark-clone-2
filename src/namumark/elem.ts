@@ -5,7 +5,7 @@ export abstract class Elem {
     constructor(range: Range) {
         this.range = range;
     }
-    flushArr(array: Elem[]): void {}
+    flushArr(array: Elem[]): Elem[] { return array }
 }
 
 export abstract class UnableChild extends Elem {}
@@ -50,7 +50,7 @@ export class MacroElem extends UnableChild {
         this.value = value;
         this.name = name;
     }
-    override flushArr(array: Elem[]) {
+    override flushArr(array: Elem[]): Elem[] {
         const flag = {
             isBroken: false,
             isError: false,
@@ -61,6 +61,7 @@ export class MacroElem extends UnableChild {
             flag.isSkippable = false;
 
             if (elem.range.start > this.range.end) {
+                temp.push(...array.slice(idx))
                 break;
             }
 
@@ -77,6 +78,7 @@ export class MacroElem extends UnableChild {
                         flag.isBroken = true;
                         break;
                     case "REVERSE_CONTAIN":
+                    case "OVERLAP":
                         flag.isSkippable = true;
                         break;
                     case "SAME":
@@ -89,11 +91,19 @@ export class MacroElem extends UnableChild {
                 }
             }
 
-            if (!flag.isSkippable) temp.push(elem);
-            if (flag.isBroken) break;
+            if (elem instanceof MacroElem) {
+                continue;
+            }
+
+            if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
+            if (flag.isBroken) {
+                temp.push(...array.slice(idx))
+                break
+            };
         }
 
         if (!flag.isError) temp.push(this);
         array = temp;
+        return array;
     }
 }

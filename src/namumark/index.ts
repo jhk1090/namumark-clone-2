@@ -55,17 +55,16 @@ export class NamuMark {
     }
 
     processMacro() {
-        const macroRegex = /\[(?<name>[^[(\]]+)\((?<value>(?:(?!\)\]).)+)\)\]/g;
+        const macroRegex = /\[(?<name>[^[(\]]+)\((?<value>[^\)\]]+)\)\]/g;
         const macroNoargValidNameRegex = /(clearfix|date|datetime|목차|tableofcontents|각주|footnote|br|pagecount)/g
-        const macroArgValidNameRegex = /(anchor|age|dday|youtube|kakaotv|nicovideo|vimeo|navertv|pagecount|math)/g
+        const validMacroName = ["anchor", "age", "dday", "youtube", "kakaotv", "nicovideo", "vimeo", "navertv", "pagecount", "math"]
         type groupType = Record<"name" | "value", string>;
         let match;
 
         while ((match = macroRegex.exec(this.wikiText)) !== null) {
             const _groups = match.groups as groupType;
             const macroName = _groups["name"];
-            if (macroArgValidNameRegex.exec(macroName) === null) {
-                macroArgValidNameRegex.lastIndex = 0;
+            if (!(validMacroName.includes(macroName))) {
                 continue;
             }
             const macroValue = _groups["value"];
@@ -79,9 +78,10 @@ export class NamuMark {
 
     processTempArray() {
         for (const tempElem of this.tempArray) {
-            tempElem.flushArr(this.wikiArray)
+            this.wikiArray = tempElem.flushArr(this.wikiArray)
             this.sortWikiArray();
         }
+        this.tempArray = [];
     }
 
     sortWikiArray() {
@@ -95,6 +95,8 @@ export class NamuMark {
             this.processMacro();
         }
 
+        console.log("========================")
+        console.log(this.wikiArray)
         return `<!DOCTYPE html>
         <html>
         <head>
