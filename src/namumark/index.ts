@@ -23,7 +23,6 @@ export class NamuMark {
     }
 
     processHeading() {
-        // const headingRegex = /\n(= [^\n]+ =|== [^\n]+ ==|=== [^\n]+ ===|==== [^\n]+ ====|===== [^\n]+ =====|====== [^\n]+ ======|=# [^\n]+ #=|==# [^\n]+ #==|===# [^\n]+ #===|====# [^\n]+ #====|=====# [^\n]+ #=====|======# [^\n]+ #======)\n/g
         const headingRegex = /\n(?<inner>(?<level>={1,6})(?<isHide>#?) ?(?<remained>[^\n]+))\n/g
         type groupType = Record<"full" | "inner" | "level" | "isHide" | "remained", string>;
         let match;
@@ -63,7 +62,7 @@ export class NamuMark {
 
         while ((match = macroRegex.exec(this.wikiText)) !== null) {
             const _groups = match.groups as groupType;
-            const macroName = _groups["name"];
+            const macroName = _groups["name"].toLowerCase();
             if (!(validMacroName.includes(macroName))) {
                 continue;
             }
