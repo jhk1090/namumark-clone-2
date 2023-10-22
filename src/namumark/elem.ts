@@ -23,17 +23,25 @@ export class RedirectElem extends UnableChild {
     }
 }
 
+export class CommentElem extends UnableChild {
+    constructor(range: Range) {
+        super(range)
+    }
+}
+
 export class HeadingElem extends AbleChild {
     value: string = "";
     availableRange: Range = new Range(0, 1);
     headingLevel: number = 0;
+    isHeadingHidden: boolean = false;
     haedingLevelAt: number[] = [];
-    constructor(value: string, range: Range, availableRange: Range, headingLevel: number, headingLevelAt: number[]) {
+    constructor(value: string, range: Range, availableRange: Range, headingLevel: number, isHeadingHidden: boolean, headingLevelAt: number[]) {
         super(range)
         this.value = value;
         this.range = range;
         this.availableRange = availableRange;
         this.headingLevel = headingLevel;
+        this.isHeadingHidden = isHeadingHidden;
         this.haedingLevelAt = headingLevelAt;
     }
 }
@@ -61,6 +69,41 @@ export class MacroElem extends UnableChild {
                 break;
             }
 
+            if (elem instanceof CommentElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // ## [macro()]
+                    case "CONTAIN":
+                        flag.isError = true;
+                        break;
+                    /*
+                    [macro(
+                    ## asdf
+                    )]
+                    */
+                    case "REVERSE_CONTAIN":
+                        flag.isSkippable = true;
+                        break;
+
+                    /*
+                    ## asdf [macro(
+                    )]
+                    [macro(
+                    ## )]
+                    */
+                    case "OVERLAP":
+                        if (this.range.start < elem.range.start) {
+                            flag.isSkippable = true;
+                        } else {
+                            flag.isError = true;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+
             if (elem instanceof HeadingElem) {
                 const {status, common} = elem.range.compare(this.range);
                 switch (status) {
@@ -72,7 +115,6 @@ export class MacroElem extends UnableChild {
                         } else {
                             flag.isError = true;
                         }
-                        // flag.isBroken = true;
                         break;
                     /* 
                     [macro(
@@ -92,7 +134,6 @@ export class MacroElem extends UnableChild {
                             flag.isSkippable = true;
                         } else {
                             flag.isError = true;
-                            // flag.isBroken = true;
                         }
                         break;
                     default:
@@ -100,11 +141,9 @@ export class MacroElem extends UnableChild {
                 }
             }
 
-            if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
-            if (flag.isBroken) {
-                temp.push(...array.slice(idx))
-                break
-            };
+            if (!flag.isSkippable) {
+                temp.push(elem);
+            }
         }
 
         if (!flag.isError) temp.push(this);
@@ -138,6 +177,18 @@ export class LinkElem extends AbleChild {
                 break;
             }
 
+            if (elem instanceof CommentElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // ## [[ asdf ]]
+                    case "CONTAIN":
+                        flag.isError = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
             if (elem instanceof HeadingElem) {
                 const {status, common} = elem.range.compare(this.range);
                 switch (status) {
@@ -149,7 +200,6 @@ export class LinkElem extends AbleChild {
                         } else {
                             flag.isError = true;
                         }
-                        // flag.isBroken = true;
                         break;
                     }
                     default:
@@ -163,7 +213,6 @@ export class LinkElem extends AbleChild {
                     // [macro([[]])]
                     case "CONTAIN":
                         flag.isError = true;
-                        // flag.isBroken = true;
                         break;
                     // [[ [macro()] ]]
                     // [[ text | [macro()] ]]
@@ -183,17 +232,14 @@ export class LinkElem extends AbleChild {
                             flag.isSkippable = true;
                         } else {
                             flag.isError = true;
-                            // flag.isBroken = true;
                         }
                     default:
                         break;
                 }
             }
 
-            if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
-            if (flag.isBroken) {
-                temp.push(...array.slice(idx))
-                break
+            if (!flag.isSkippable) {
+                temp.push(elem);
             }
         }
 
@@ -225,6 +271,18 @@ export class ULinkElem extends UnableChild {
                 break;
             }
 
+            if (elem instanceof CommentElem) {
+                const {status, common} = elem.range.compare(this.range);
+                switch (status) {
+                    // ## [[ asdf ]]
+                    case "CONTAIN":
+                        flag.isError = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
             if (elem instanceof HeadingElem) {
                 const {status, common} = elem.range.compare(this.range);
                 switch (status) {
@@ -236,7 +294,6 @@ export class ULinkElem extends UnableChild {
                         } else {
                             flag.isError = true;
                         }
-                        // flag.isBroken = true;
                         break;
                     }
                     default:
@@ -250,7 +307,6 @@ export class ULinkElem extends UnableChild {
                     // [macro([[]])]
                     case "CONTAIN":
                         flag.isError = true;
-                        // flag.isBroken = true;
                         break;
                     // [[ [macro()] ]]
                     case "REVERSE_CONTAIN":
@@ -264,7 +320,6 @@ export class ULinkElem extends UnableChild {
                             flag.isSkippable = true;
                         } else {
                             flag.isError = true;
-                            // flag.isBroken = true;
                         }
                     default:
                         break;
@@ -274,11 +329,6 @@ export class ULinkElem extends UnableChild {
             if (!flag.isSkippable) {
                 temp.push(elem);
             }
-            // if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
-            // if (flag.isBroken) {
-            //     temp.push(...array.slice(idx))
-            //     break
-            // }
         }
 
         if (!flag.isError) temp.push(this);

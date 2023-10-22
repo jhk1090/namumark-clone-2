@@ -1,4 +1,4 @@
-import { Elem, HeadingElem, LinkElem, MacroElem, RedirectElem, ULinkElem } from "./elem";
+import { CommentElem, Elem, HeadingElem, LinkElem, MacroElem, RedirectElem, ULinkElem } from "./elem";
 import { Range } from "./utils";
 
 export class NamuMark {
@@ -18,7 +18,16 @@ export class NamuMark {
         const match = redirectRegex.exec(this.wikiText)
         if (match !== null) {
             this.isRedirect = true;
-            this.wikiArray.push(new RedirectElem(new Range(match.index, match.index + match[0].length)))
+            this.wikiArray.push(new RedirectElem(new Range(match.index, redirectRegex.lastIndex)))
+        }
+    }
+
+    processComment() {
+        const commentRegex = /\n##[^\n]+/g
+        let match;
+
+        while ((match = commentRegex.exec(this.wikiText)) !== null) {
+            this.wikiArray.push(new CommentElem(new Range(match.index + 1, commentRegex.lastIndex)))
         }
     }
 
@@ -49,7 +58,7 @@ export class NamuMark {
             const splitedInner = inner.split(" ")
             const value = splitedInner.slice(1, splitedInner.length - 1).join(" ");
 
-            this.wikiArray.push(new HeadingElem(value, range, availableRange, headingLevel, [...this.headingLevelAt]));
+            this.wikiArray.push(new HeadingElem(value, range, availableRange, headingLevel, isHide === "#", [...this.headingLevelAt]));
 
             // \n== 제목1 ==\n== 제목2 ==가 있을때 \n== 제목1 ==\n을 감지후 == 제목2 ==\n가 감지되지 않음
             headingRegex.lastIndex -= 1;
@@ -103,8 +112,6 @@ export class NamuMark {
             }
         }
 
-        console.log(this.wikiArray);
-        console.log(this.tempArray);
         this.processTempArray();
     }
     
@@ -123,7 +130,9 @@ export class NamuMark {
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
+            this.processComment();
             this.processHeading();
+            console.log(this.wikiArray)
             this.processMacro();
             this.processLink();
         }
