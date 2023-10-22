@@ -1,24 +1,20 @@
 import { Range } from "./utils";
+import { v4 as uuidv4 } from "uuid";
 
 export abstract class Elem {
     range: Range = new Range(0, 1);
+    parentUUID: string | null = null;
     constructor(range: Range) {
         this.range = range;
     }
     flushArr(array: Elem[]): Elem[] { return array }
+    setParent(uuid: string) { this.parentUUID = uuid }
 }
 
 export abstract class UnableChild extends Elem {}
 
 export abstract class AbleChild extends Elem {
-    children: Elem[] = [];
-    pushChildren(children: Elem | Elem[]) {
-        if (children instanceof Elem) {
-            this.children.push(children)
-        } else {
-            this.children.push(...children)
-        }
-    }
+    uuid: string = uuidv4();
 }
 
 export class RedirectElem extends UnableChild {
@@ -72,11 +68,11 @@ export class MacroElem extends UnableChild {
                     case "CONTAIN":
                         const {status: substatus, common: subcommon} = elem.availableRange.compare(common as Range);
                         if (substatus === "CONTAIN" || substatus === "SAME") {
-                            elem.pushChildren(this)
+                            this.setParent(elem.uuid);
                         } else {
                             flag.isError = true;
                         }
-                        flag.isBroken = true;
+                        // flag.isBroken = true;
                         break;
                     /* 
                     [macro(
@@ -96,7 +92,7 @@ export class MacroElem extends UnableChild {
                             flag.isSkippable = true;
                         } else {
                             flag.isError = true;
-                            flag.isBroken = true;
+                            // flag.isBroken = true;
                         }
                         break;
                     default:
@@ -149,11 +145,11 @@ export class LinkElem extends AbleChild {
                     case "CONTAIN": {
                         const { status: substatus, common: subcommon } = elem.availableRange.compare(common as Range);
                         if (substatus === "CONTAIN" || substatus === "SAME") {
-                            elem.pushChildren(this);
+                            this.setParent(elem.uuid);;
                         } else {
                             flag.isError = true;
                         }
-                        flag.isBroken = true;
+                        // flag.isBroken = true;
                         break;
                     }
                     default:
@@ -167,7 +163,7 @@ export class LinkElem extends AbleChild {
                     // [macro([[]])]
                     case "CONTAIN":
                         flag.isError = true;
-                        flag.isBroken = true;
+                        // flag.isBroken = true;
                         break;
                     // [[ [macro()] ]]
                     // [[ text | [macro()] ]]
@@ -175,7 +171,7 @@ export class LinkElem extends AbleChild {
                     case "REVERSE_CONTAIN":
                         const {status: substatus, common: subcommon} = this.availableRange.compare(common as Range);
                         if (substatus === "CONTAIN" || substatus === "SAME") {
-                            this.pushChildren(elem);
+                            elem.setParent(this.uuid)
                         }
                         flag.isSkippable = true;
                         break;
@@ -187,7 +183,7 @@ export class LinkElem extends AbleChild {
                             flag.isSkippable = true;
                         } else {
                             flag.isError = true;
-                            flag.isBroken = true;
+                            // flag.isBroken = true;
                         }
                     default:
                         break;
@@ -236,11 +232,11 @@ export class ULinkElem extends UnableChild {
                     case "CONTAIN": {
                         const { status: substatus, common: subcommon } = elem.availableRange.compare(common as Range);
                         if (substatus === "CONTAIN" || substatus === "SAME") {
-                            elem.pushChildren(this);
+                            this.setParent(elem.uuid);;
                         } else {
                             flag.isError = true;
                         }
-                        flag.isBroken = true;
+                        // flag.isBroken = true;
                         break;
                     }
                     default:
@@ -254,7 +250,7 @@ export class ULinkElem extends UnableChild {
                     // [macro([[]])]
                     case "CONTAIN":
                         flag.isError = true;
-                        flag.isBroken = true;
+                        // flag.isBroken = true;
                         break;
                     // [[ [macro()] ]]
                     case "REVERSE_CONTAIN":
@@ -268,18 +264,21 @@ export class ULinkElem extends UnableChild {
                             flag.isSkippable = true;
                         } else {
                             flag.isError = true;
-                            flag.isBroken = true;
+                            // flag.isBroken = true;
                         }
                     default:
                         break;
                 }
             }
 
-            if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
-            if (flag.isBroken) {
-                temp.push(...array.slice(idx))
-                break
+            if (!flag.isSkippable) {
+                temp.push(elem);
             }
+            // if (!flag.isSkippable && !flag.isBroken) temp.push(elem);
+            // if (flag.isBroken) {
+            //     temp.push(...array.slice(idx))
+            //     break
+            // }
         }
 
         if (!flag.isError) temp.push(this);

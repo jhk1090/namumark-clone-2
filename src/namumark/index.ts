@@ -50,6 +50,9 @@ export class NamuMark {
             const value = splitedInner.slice(1, splitedInner.length - 1).join(" ");
 
             this.wikiArray.push(new HeadingElem(value, range, availableRange, headingLevel, [...this.headingLevelAt]));
+
+            // \n== 제목1 ==\n== 제목2 ==가 있을때 \n== 제목1 ==\n을 감지후 == 제목2 ==\n가 감지되지 않음
+            headingRegex.lastIndex -= 1;
         }
     }
 
