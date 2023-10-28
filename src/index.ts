@@ -1,5 +1,5 @@
 import { Range } from "./utils";
-import { Elem, HolderElem, holderType } from "./elem"
+import { Elem, HeadingElem, HolderElem, holderType } from "./elem"
 
 export class NamuMark {
     wikiText: string = "";
@@ -75,39 +75,98 @@ export class NamuMark {
     }
 
     parseHolderElem() {
-        const events: HolderElem[] = [];
+        type StackedType = {[k in holderType]: {uuid: string, index: number}[][]}
+        const stacked: StackedType = {} as StackedType
+        const uuidifyHolderArray = this.holderArray.map(v => v.uuid);
+        const findHolderElem = (uuid: string) => {
+            return this.holderArray.find(v => v.uuid === uuid) as HolderElem
+        }
+        const findHolderElemRange = (uuid: string) => {
+            return findHolderElem(uuid).range
+        }
+        const substringRange = (range: Range) => {
+            return this.wikiText.substring(range.start, range.end)
+        }
+        const wikiTemp: Elem[] = [];
 
-        for (const holder of this.holderArray) {
-            const lastEvent = events[events.length - 1];
-
-            if (holder.type === "SquareBracketOpen") {
-                events.push(holder)
-            }
-            if (holder.type === "MacroArgumentOpen") {
-                if (lastEvent.type === "SquareBracketOpen") {
-                    events.push(holder)
+        const handleStacked = () => {    
+            const pushElem = (holder: HolderElem) => {
+                if (stacked[holder.type] === undefined) {
+                    stacked[holder.type] = [];
+                }
+    
+                let currentStacked = stacked[holder.type]
+                let currentStackedLast = currentStacked.at(-1)
+                const result = {uuid: holder.uuid, index: uuidifyHolderArray.findIndex(v => v === holder.uuid)}
+                if (currentStackedLast === undefined) {
+                    currentStacked.push([result])
+                } else {
+                    if (findHolderElemRange(currentStackedLast.at(-1)?.uuid as string).compare(holder.range).status === "ADJACENT") {
+                        currentStackedLast.push(result)
+                    } else {
+                        currentStacked.push([result])
+                    }
                 }
             }
-            if (holder.type === "MacroArgumentClose") {
-                const result = events.findLastIndex(v => v.type === "MacroArgumentOpen")
-                if (result !== -1) {
-                    events.push(holder)
-                }
-            }
-            if (holder.type === "SquareBracketClose") {
-                
+    
+            for (const holder of this.holderArray) {
+                pushElem(holder);
             }
         }
+        const matchStacked = () => {
+            for (const elemArray of stacked.HeadingOpen) {
+                const elem = elemArray[0];
+                const headingCloseFlatted = stacked.HeadingClose.flat();
+
+                // pair가 있는지 확인
+                const foundPair = headingCloseFlatted.find(v => v.index > elem.index)
+                if (foundPair === undefined) {
+                    continue;
+                }
+                // heading 맞추기
+                const elemRange = findHolderElemRange(elem.uuid)
+                const foundPairRange = findHolderElemRange(foundPair.uuid)
+                const elemString = substringRange(elemRange)
+                const foundPairString = substringRange(foundPairRange)
+
+                const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
+                const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
+                const startGroup = startRegex.exec(elemString)?.groups
+                const endGroup = endRegex.exec(foundPairString)?.groups
+                const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
+                
+                if (!isSameKind) {
+                    continue;
+                }
+                // \n 감지 todo
+                const headingContentString = substringRange(new Range(elemRange.end, foundPairRange.start));
+                if (headingContentString.indexOf("\n") !== -1) {
+                    continue;
+                }
+
+                const level = startGroup?.level.length ?? 0
+                const isHidden = startGroup?.hide ? true : false
+
+                this.headingLevelAt[level - 1] += 1;
+                this.headingLevelAt.fill(0, level);
+
+                wikiTemp.push(new HeadingElem(new Range(elemRange.start, foundPairRange.end), level, isHidden, [...this.headingLevelAt]))
+            }
+        }
+
+        
+        handleStacked()
+        matchStacked()
+        
+        console.log(wikiTemp)
     }
 
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
             this.collectHolderElem()
+            this.parseHolderElem()
         }
-
-        console.log("asdf ====================================== asdf")
-        console.log(this.holderArray)
 
         return `<!DOCTYPE html>
         <html>

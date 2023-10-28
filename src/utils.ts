@@ -1,4 +1,4 @@
-type RangeStatusType = "CONTAIN" | "OVERLAP" | "REVERSE_CONTAIN" | "NONE" | "UNDEFINED" | "SAME";
+type RangeStatusType = "CONTAIN" | "OVERLAP" | "REVERSE_CONTAIN" | "NONE" | "UNDEFINED" | "SAME" | "ADJACENT";
 
 export class Range {
     start: number;
@@ -18,7 +18,7 @@ export class Range {
     }
 
     private isDisjoint(otherRange: Range) {
-        return this.start >= otherRange.end || this.end <= otherRange.start
+        return this.start > otherRange.end || this.end < otherRange.start
     }
 
     private isContainedIn(otherRange: Range) {
@@ -27,6 +27,10 @@ export class Range {
 
     private isOverlap(otherRange: Range) {
         return this.start < otherRange.end && this.end > otherRange.start
+    }
+
+    private isAdjacent(otherRange: Range) {
+        return this.end === otherRange.start || this.start === otherRange.end;
     }
 
     compare(otherRange: Range): { status: RangeStatusType; common: Range | null } {
@@ -51,6 +55,10 @@ export class Range {
             const commonEnd = Math.min(this.end, otherRange.end);
             const commonRange = new Range(commonStart, commonEnd);
             return { status: "OVERLAP", common: commonRange };
+        }
+
+        if (this.isAdjacent(otherRange)) {
+            return { status: "ADJACENT", common: null };
         }
 
         return { status: "UNDEFINED", common: null };
