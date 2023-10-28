@@ -1,11 +1,11 @@
-import { CommentElem, Elem, HeadingElem, LinkElem, MacroElem, RedirectElem, ULinkElem } from "./elem";
 import { Range } from "./utils";
+import { Elem, HolderElem, holderType } from "./elem"
 
 export class NamuMark {
     wikiText: string = "";
     isRedirect: boolean = false;
     wikiArray: Elem[] = [];
-    tempArray: Elem[] = [];
+    holderArray: HolderElem[] = [];
     headingLevelAt: number[] = [0, 0, 0, 0, 0, 0];
 
     constructor(wikiText: string) {
@@ -18,127 +18,96 @@ export class NamuMark {
         const match = redirectRegex.exec(this.wikiText)
         if (match !== null) {
             this.isRedirect = true;
-            this.wikiArray.push(new RedirectElem(new Range(match.index, redirectRegex.lastIndex)))
         }
     }
 
-    processComment() {
-        const commentRegex = /\n##[^\n]+/g
-        let match;
+    evaluateHolder(arr: [RegExp, holderType] | [RegExp, holderType, number |undefined] | [RegExp, holderType, number | undefined, number | undefined]) {
+        let [regex, type, offsetStart, offsetEnd] = arr;
+        offsetStart = offsetStart ?? 0
+        offsetEnd = offsetEnd ?? 0
 
-        while ((match = commentRegex.exec(this.wikiText)) !== null) {
-            this.wikiArray.push(new CommentElem(new Range(match.index + 1, commentRegex.lastIndex)))
+        let match;
+        while ((match = regex.exec(this.wikiText)) !== null) {
+            this.holderArray.push(new HolderElem(new Range(match.index + offsetStart, regex.lastIndex + offsetEnd), type))
         }
     }
 
-    processHeading() {
-        const headingRegex = /\n(?<inner>(?<level>={1,6})(?<isHide>#?) ?(?<remained>[^\n]+))\n/g
-        type groupType = Record<"full" | "inner" | "level" | "isHide" | "remained", string>;
-        let match;
+    collectHolderElem() {
+        type offset = number | undefined;
+        type offsetNone = [RegExp, holderType]
+        type offsetOnlyStart = [RegExp, holderType, offset]
+        type offsetBoth = [RegExp, holderType, offset, offset]
+        // linkpipe, tablecell
+        const pipe: offsetNone = [/\|/g, "Pipe"]
+        const comment: offsetOnlyStart = [/\n##[^\n]+/g, "Comment", 1]
+        // linkOpen, macroOpen
+        const squareBracketOpen: offsetNone = [/\[/g, "SquareBracketOpen"];
+        // footnoteclose, linkclose, macroclose
+        const squareBracketClose: offsetNone = [/\]/g, "SquareBracketClose"];
+        const macroArgumentOpen: offsetNone = [/\(/g, "MacroArgumentOpen"];
+        const macroArgumentClose: offsetNone = [/\)/g, "MacroArgumentClose"];
+        const headingOpen: offsetOnlyStart = [/\n={1,6}(#?) /g, "HeadingOpen", 1];
+        const headingClose: offsetBoth = [/ (#?)={1,6}\n/g, "HeadingClose", undefined, -1];
+        const tripleBracketOpen: offsetNone = [/\{\{\{/g, "TripleBracketOpen"];
+        const tripleBracketClose: offsetNone = [/\}\}\}/g, "TripleBracketClose"]
+        const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1]
+        const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1]
+        const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1]
+        const footnoteOpen: offsetNone = [/\[\*/g, "FootnoteOpen"]
+        const tableArgumentOpen: offsetNone = [/\</g, "TableArgumentOpen"]
+        const tableArgumentClose: offsetNone = [/\</g, "TableArgumentClose"]
+        const mathTagOpen: offsetNone = [/\<math\>/g, "MathTagOpen"]
+        const mathTagClose: offsetNone = [/\<\/math\>/g, "MathTagClose"]
+        const quote: offsetNone = [/\'/g, "Quote"]
+        const underbar: offsetNone = [/\_/g, "Underbar"]
+        const tilde: offsetNone = [/\~/g, "Tilde"]
+        const carot: offsetNone = [/\^/g, "Carot"]
+        const comma: offsetNone = [/\,/g, "Comma"]
+        const hyphen: offsetNone = [/\-/g, "Hyphen"]
 
-        while ((match = headingRegex.exec(this.wikiText)) !== null) {
-            const _groups = match.groups as groupType;
-            const inner = _groups["inner"];
-            const level = _groups["level"];
-            const headingLevel = level.length;
-            const isHide = _groups["isHide"];
-            const remained = _groups["remained"];
+        const evaluators = [pipe, comment, squareBracketOpen, squareBracketClose, macroArgumentOpen, macroArgumentClose, headingOpen, headingClose, tripleBracketOpen, tripleBracketClose, unorderedList, orderedList, cite, footnoteOpen, tableArgumentOpen, tableArgumentClose, mathTagOpen, mathTagClose, quote, underbar, tilde, carot, comma, hyphen]
+        
+        for (const evaluator of evaluators) {
+            this.evaluateHolder(evaluator)
+        }
 
-            // heading verification
-            const splitedRemained = remained.split(" ")
-            const lastRemained = splitedRemained[splitedRemained.length - 1];
-            if (lastRemained !== isHide + level) {
-                continue;
+        this.holderArray.sort((a, b) => a.range.start - b.range.start)
+    }
+
+    parseHolderElem() {
+        const events: HolderElem[] = [];
+
+        for (const holder of this.holderArray) {
+            const lastEvent = events[events.length - 1];
+
+            if (holder.type === "SquareBracketOpen") {
+                events.push(holder)
             }
-
-            this.headingLevelAt[headingLevel - 1] += 1
-            this.headingLevelAt.fill(0, headingLevel)
-            const range = new Range(match.index + 1, headingRegex.lastIndex - 1);
-            const availableRange = new Range(range.start + (headingLevel + 1), range.end - (headingLevel + 1));
-            const splitedInner = inner.split(" ")
-            const value = splitedInner.slice(1, splitedInner.length - 1).join(" ");
-
-            this.wikiArray.push(new HeadingElem(value, range, availableRange, headingLevel, isHide === "#", [...this.headingLevelAt]));
-
-            // \n== 제목1 ==\n== 제목2 ==가 있을때 \n== 제목1 ==\n을 감지후 == 제목2 ==\n가 감지되지 않음
-            headingRegex.lastIndex -= 1;
-        }
-    }
-
-    processMacro() {
-        const macroRegex = /\[(?<name>[^[(\]]+)(?<argument>\((?<value>(?:(?!\)\])[^])+)?\))?\]/g;
-        const validNoargMacroName = ["clearfix", "date", "datetime", "목차", "tableofcontents", "각주", "footnote", "br", "pagecount"]
-        const validMacroName = ["anchor", "age", "dday", "youtube", "kakaotv", "nicovideo", "vimeo", "navertv", "pagecount", "math", "include"]
-        type groupType = Record<"name" | "argument" | "value", string | undefined>;
-        let match;
-
-        while ((match = macroRegex.exec(this.wikiText)) !== null) {
-            const _groups = match.groups as groupType;
-            const macroName = (_groups["name"] as string).toLowerCase();
-            const macroArgument = _groups["argument"] ?? "";
-            if (macroArgument === "" && !(validNoargMacroName.includes(macroName))) {
-                continue;
+            if (holder.type === "MacroArgumentOpen") {
+                if (lastEvent.type === "SquareBracketOpen") {
+                    events.push(holder)
+                }
             }
-            if (macroArgument !== "" && !(validMacroName.includes(macroName))) {
-                continue;
+            if (holder.type === "MacroArgumentClose") {
+                const result = events.findLastIndex(v => v.type === "MacroArgumentOpen")
+                if (result !== -1) {
+                    events.push(holder)
+                }
             }
-            const macroValue = _groups["value"] ?? null;
-            const range = new Range(match.index, macroRegex.lastIndex);
-            this.tempArray.push(new MacroElem(macroValue, macroName, range));
-        }
-
-        this.processTempArray();
-    }
-
-    processLink() {
-        const linkRegex = /\[\[(?<linkTo>(?:(?!\[\[|\]\]|\||<|>).)+)(?:\|(?<displayAs>(?:(?!\[\[|\]\]|\|).)+)?)?\]\]/g;
-        type groupType = Record<"linkTo" | "displayAs", string | undefined>;
-        let match;
-
-        while ((match = linkRegex.exec(this.wikiText)) !== null) {
-            const _groups = match.groups as groupType;
-            const linkTo = _groups["linkTo"] as string
-            const displayAs = _groups["displayAs"] ?? null;
-            const range = new Range(match.index, linkRegex.lastIndex);
-            if (displayAs === null) {
-                this.tempArray.push(new ULinkElem(linkTo, range));
-            } else {
-                const splitedFull = match[0].split("|");
-                const preceded = splitedFull[0];
-                const followed = "]]"
-                // [[asdf|asdf]]
-                const availableRange = new Range(range.start + preceded.length + 1, range.end - followed.length)
-                this.tempArray.push(displayAs === null ? new ULinkElem(linkTo, range) : new LinkElem(linkTo, displayAs, range, availableRange))
+            if (holder.type === "SquareBracketClose") {
+                
             }
         }
-
-        this.processTempArray();
-    }
-    
-    processTempArray() {
-        for (const tempElem of this.tempArray) {
-            this.wikiArray = tempElem.flushArr(this.wikiArray)
-            this.sortWikiArray();
-        }
-        this.tempArray = [];
-    }
-
-    sortWikiArray() {
-        this.wikiArray.sort((a, b) => a.range.start - b.range.start)
     }
 
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
-            this.processComment();
-            this.processHeading();
-            console.log(this.wikiArray)
-            this.processMacro();
-            this.processLink();
+            this.collectHolderElem()
         }
 
         console.log("asdf ====================================== asdf")
-        console.log(this.wikiArray)
+        console.log(this.holderArray)
 
         return `<!DOCTYPE html>
         <html>
