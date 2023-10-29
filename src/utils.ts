@@ -13,23 +13,23 @@ export class Range {
         this.end = end;
     }
 
-    private isSame(otherRange: Range) {
+    isSame(otherRange: Range) {
         return this.start === otherRange.start && this.end === otherRange.end;
     }
 
-    private isDisjoint(otherRange: Range) {
+    isDisjoint(otherRange: Range) {
         return this.start > otherRange.end || this.end < otherRange.start
     }
 
-    private isContainedIn(otherRange: Range) {
+    isContainedIn(otherRange: Range) {
         return this.start >= otherRange.start && this.end <= otherRange.end
     }
 
-    private isOverlap(otherRange: Range) {
+    isOverlap(otherRange: Range) {
         return this.start < otherRange.end && this.end > otherRange.start
     }
 
-    private isAdjacent(otherRange: Range) {
+    isAdjacent(otherRange: Range) {
         return this.end === otherRange.start || this.start === otherRange.end;
     }
 

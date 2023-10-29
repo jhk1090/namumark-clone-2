@@ -1,11 +1,12 @@
 import { Range, seekEOL } from "./utils";
-import { Elem, HeadingElem, HolderElem, holderType } from "./elem"
+import { Elem, HeadingElem, HolderElem, HolderType } from "./elem"
 
 export class NamuMark {
     wikiText: string = "";
     isRedirect: boolean = false;
     wikiArray: Elem[] = [];
     holderArray: HolderElem[] = [];
+    eolHolderArray: { range: Range; holders: HolderElem[] | null }[] = [];
     headingLevelAt: number[] = [0, 0, 0, 0, 0, 0];
 
     constructor(wikiText: string) {
@@ -21,22 +22,49 @@ export class NamuMark {
         }
     }
 
-    evaluateHolder(arr: [RegExp, holderType] | [RegExp, holderType, number |undefined] | [RegExp, holderType, number | undefined, number | undefined]) {
+    fillEolHolder() {
+        let offset = 0
+        while (true) {
+            const result = seekEOL(this.wikiText, offset)
+            if (result === -1) {
+                break;
+            } else {
+                this.eolHolderArray.push({range: new Range(offset, result + 1), holders: null})
+                offset = result + 1;
+            }
+        }
+    }
+
+    evaluateHolder(arr: [RegExp, HolderType] | [RegExp, HolderType, number |undefined] | [RegExp, HolderType, number | undefined, number | undefined]) {
         let [regex, type, offsetStart, offsetEnd] = arr;
         offsetStart = offsetStart ?? 0
         offsetEnd = offsetEnd ?? 0
 
         let match;
+
         while ((match = regex.exec(this.wikiText)) !== null) {
-            this.holderArray.push(new HolderElem(new Range(match.index + offsetStart, regex.lastIndex + offsetEnd), type))
+            let target;
+            let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd)
+            for (const eol of this.eolHolderArray) {
+                if (targetRange.isContainedIn(eol.range)) {
+                    target = new HolderElem(targetRange, eol.range, type)
+                    if (eol.holders === null) {
+                        eol.holders = [target]
+                    } else {
+                        eol.holders.push(target)
+                    }
+                    break;
+                }
+            }
+            this.holderArray.push(target as HolderElem)
         }
     }
 
     collectHolderElem() {
         type offset = number | undefined;
-        type offsetNone = [RegExp, holderType]
-        type offsetOnlyStart = [RegExp, holderType, offset]
-        type offsetBoth = [RegExp, holderType, offset, offset]
+        type offsetNone = [RegExp, HolderType]
+        type offsetOnlyStart = [RegExp, HolderType, offset]
+        type offsetBoth = [RegExp, HolderType, offset, offset]
         // linkpipe, tablecell
         const pipe: offsetNone = [/\|/g, "Pipe"]
         const comment: offsetOnlyStart = [/\n##[^\n]+/g, "Comment", 1]
@@ -75,132 +103,139 @@ export class NamuMark {
     }
 
     parseHolderElem() {
-        type StackedType = {[k in holderType]: {uuid: string, index: number}[][]}
+        type StackedType = {[k in HolderType]: {holder: HolderElem, index: number}[][]}
         const stacked: StackedType = {} as StackedType
-        const uuidifyHolderArray = this.holderArray.map(v => v.uuid);
-        const lineArray: {range: Range; items: string[] | null;}[] = []
-        const findHolderElem = (uuid: string) => {
-            return this.holderArray.find(v => v.uuid === uuid) as HolderElem
-        }
-        const findHolderElemRange = (uuid: string) => {
-            return findHolderElem(uuid).range
-        }
         const substringRange = (range: Range) => {
             return this.wikiText.substring(range.start, range.end)
         }
         const wikiTemp: Elem[] = [];
 
-        const fillLineArray = () => {
-            let offset = 0
-            while (true) {
-                const result = seekEOL(this.wikiText, offset)
-                if (result === -1) {
-                    break;
-                } else {
-                    lineArray.push({range: new Range(offset, result + 1), items: null})
-                    offset = result + 1;
-                }
-            }
-            for (const uuidifyHolder of uuidifyHolderArray) {
-                for (const line of lineArray) {
-                    if (line.range.compare(findHolderElem(uuidifyHolder).range).status === "CONTAIN") {
-                        if (line.items === null) {
-                            line.items = [uuidifyHolder]
-                        } else {
-                            line.items.push(uuidifyHolder)
-                        }
-                        break;
-                    }
-                }
-            }
-        }
         const handleStacked = () => {    
-            const pushElem = (holder: HolderElem) => {
+            const pushElem = (holder: HolderElem, index: number) => {
                 if (stacked[holder.type] === undefined) {
                     stacked[holder.type] = [];
                 }
     
                 let currentStacked = stacked[holder.type]
                 let currentStackedLast = currentStacked.at(-1)
-                const result = {uuid: holder.uuid, index: uuidifyHolderArray.findIndex(v => v === holder.uuid)}
+                const result = {holder, index}
                 if (currentStackedLast === undefined) {
                     currentStacked.push([result])
                 } else {
-                    if (findHolderElemRange(currentStackedLast.at(-1)?.uuid as string).compare(holder.range).status === "ADJACENT") {
-                        currentStackedLast.push(result)
+                    if (currentStackedLast.at(-1)?.holder.range.isAdjacent(holder.range)) {
+                        currentStackedLast.push(result);
                     } else {
                         currentStacked.push([result])
                     }
                 }
             }
     
-            for (const holder of this.holderArray) {
-                pushElem(holder);
+            for (let idx = 0; idx < this.holderArray.length; idx++) {
+                pushElem(this.holderArray[idx], idx);
             }
         }
         const matchStacked = () => {
             for (const elem of stacked.HeadingOpen.flat()) {
-                
-            }
-        }
-        const DEPR__matchStacked = () => {
-            for (const elemArray of stacked.HeadingOpen) {
-                const elem = elemArray[0];
-                const headingCloseFlatted = stacked.HeadingClose.flat();
-
-                // pair가 있는지 확인
-                const foundPair = headingCloseFlatted.find(v => v.index > elem.index)
-                if (foundPair === undefined) {
+                const openElem = elem.holder;
+                // 같은 라인에 있는지 체크
+                const openElemLine = this.eolHolderArray.find(v => v.range.isSame(openElem.eolRange)) 
+                if (openElemLine === undefined || openElemLine.holders === null) {
                     continue;
                 }
-                // heading 맞추기
-                const elemRange = findHolderElemRange(elem.uuid)
-                const foundPairRange = findHolderElemRange(foundPair.uuid)
-                const elemString = substringRange(elemRange)
-                const foundPairString = substringRange(foundPairRange)
+                const closeElem = openElemLine.holders.find(v => v.type === "HeadingClose")
+                if (closeElem === undefined) {
+                    continue;
+                }
 
+                // 같은 레벨인지 체크
+                const openElemString = substringRange(openElem.range)
+                const closeElemString = substringRange(closeElem.range)
                 const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
                 const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
-                const startGroup = startRegex.exec(elemString)?.groups
-                const endGroup = endRegex.exec(foundPairString)?.groups
+                const startGroup = startRegex.exec(openElemString)?.groups
+                const endGroup = endRegex.exec(closeElemString)?.groups
                 const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
-                
+
                 if (!isSameKind) {
                     continue;
                 }
-                // \n 감지 todo
-                const headingContentString = substringRange(new Range(elemRange.end, foundPairRange.start));
-                if (headingContentString.indexOf("\n") !== -1) {
-                    continue;
-                }
-
+                // push
                 const level = startGroup?.level.length ?? 0
                 const isHidden = startGroup?.hide ? true : false
 
                 this.headingLevelAt[level - 1] += 1;
                 this.headingLevelAt.fill(0, level);
 
-                wikiTemp.push(new HeadingElem(new Range(elemRange.start, foundPairRange.end), level, isHidden, [...this.headingLevelAt]))
+                wikiTemp.push(new HeadingElem(new Range(openElem.range.start, closeElem.range.end), level, isHidden, [...this.headingLevelAt]))
             }
-            type FlagType = "MacroOpen"
-            const flag: {type: FlagType, index: number}[] = []
-            for (const elemArray of stacked.SquareBracketOpen) {
-                if (elemArray.length === 1) {
-                    flag.push({type: "MacroOpen", index: elemArray[0].index})
+            for (const elem of stacked.TripleBracketOpen) {
+                const openElem = elem[0];
+                const closeElem = stacked.TripleBracketClose.find(v => v.length !== 0 && v[0].index > openElem.index)
+                if (closeElem === undefined) {
+                    continue;
                 }
+
+                
             }
         }
+        // const DEPR__matchStacked = () => {
+        //     for (const elemArray of stacked.HeadingOpen) {
+        //         const elem = elemArray[0];
+        //         const headingCloseFlatted = stacked.HeadingClose.flat();
 
-        fillLineArray()
+        //         // pair가 있는지 확인
+        //         const foundPair = headingCloseFlatted.find(v => v.index > elem.index)
+        //         if (foundPair === undefined) {
+        //             continue;
+        //         }
+        //         // heading 맞추기
+        //         const elemRange = findHolderElemRange(elem.uuid)
+        //         const foundPairRange = findHolderElemRange(foundPair.uuid)
+        //         const elemString = substringRange(elemRange)
+        //         const foundPairString = substringRange(foundPairRange)
+
+        //         const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
+        //         const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
+        //         const startGroup = startRegex.exec(elemString)?.groups
+        //         const endGroup = endRegex.exec(foundPairString)?.groups
+        //         const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
+                
+        //         if (!isSameKind) {
+        //             continue;
+        //         }
+        //         // \n 감지 todo
+        //         const headingContentString = substringRange(new Range(elemRange.end, foundPairRange.start));
+        //         if (headingContentString.indexOf("\n") !== -1) {
+        //             continue;
+        //         }
+
+        //         const level = startGroup?.level.length ?? 0
+        //         const isHidden = startGroup?.hide ? true : false
+
+        //         this.headingLevelAt[level - 1] += 1;
+        //         this.headingLevelAt.fill(0, level);
+
+        //         wikiTemp.push(new HeadingElem(new Range(elemRange.start, foundPairRange.end), level, isHidden, [...this.headingLevelAt]))
+        //     }
+        //     type FlagType = "MacroOpen"
+        //     const flag: {type: FlagType, index: number}[] = []
+        //     for (const elemArray of stacked.SquareBracketOpen) {
+        //         if (elemArray.length === 1) {
+        //             flag.push({type: "MacroOpen", index: elemArray[0].index})
+        //         }
+        //     }
+        // }
         handleStacked()
+        matchStacked()
+        // console.log(this.eolHolderArray)
+        console.log(wikiTemp)
         // DEPR__matchStacked()
-
-        console.log(lineArray)
     }
 
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
+            this.fillEolHolder()
             this.collectHolderElem()
             this.parseHolderElem()
         }
