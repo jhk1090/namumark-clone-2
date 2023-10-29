@@ -1,4 +1,4 @@
-import { Range } from "./utils";
+import { Range, seekEOL } from "./utils";
 import { Elem, HeadingElem, HolderElem, holderType } from "./elem"
 
 export class NamuMark {
@@ -78,6 +78,7 @@ export class NamuMark {
         type StackedType = {[k in holderType]: {uuid: string, index: number}[][]}
         const stacked: StackedType = {} as StackedType
         const uuidifyHolderArray = this.holderArray.map(v => v.uuid);
+        const lineArray: {range: Range; items: string[] | null;}[] = []
         const findHolderElem = (uuid: string) => {
             return this.holderArray.find(v => v.uuid === uuid) as HolderElem
         }
@@ -89,6 +90,30 @@ export class NamuMark {
         }
         const wikiTemp: Elem[] = [];
 
+        const fillLineArray = () => {
+            let offset = 0
+            while (true) {
+                const result = seekEOL(this.wikiText, offset)
+                if (result === -1) {
+                    break;
+                } else {
+                    lineArray.push({range: new Range(offset, result + 1), items: null})
+                    offset = result + 1;
+                }
+            }
+            for (const uuidifyHolder of uuidifyHolderArray) {
+                for (const line of lineArray) {
+                    if (line.range.compare(findHolderElem(uuidifyHolder).range).status === "CONTAIN") {
+                        if (line.items === null) {
+                            line.items = [uuidifyHolder]
+                        } else {
+                            line.items.push(uuidifyHolder)
+                        }
+                        break;
+                    }
+                }
+            }
+        }
         const handleStacked = () => {    
             const pushElem = (holder: HolderElem) => {
                 if (stacked[holder.type] === undefined) {
@@ -114,6 +139,11 @@ export class NamuMark {
             }
         }
         const matchStacked = () => {
+            for (const elem of stacked.HeadingOpen.flat()) {
+                
+            }
+        }
+        const DEPR__matchStacked = () => {
             for (const elemArray of stacked.HeadingOpen) {
                 const elem = elemArray[0];
                 const headingCloseFlatted = stacked.HeadingClose.flat();
@@ -152,13 +182,20 @@ export class NamuMark {
 
                 wikiTemp.push(new HeadingElem(new Range(elemRange.start, foundPairRange.end), level, isHidden, [...this.headingLevelAt]))
             }
+            type FlagType = "MacroOpen"
+            const flag: {type: FlagType, index: number}[] = []
+            for (const elemArray of stacked.SquareBracketOpen) {
+                if (elemArray.length === 1) {
+                    flag.push({type: "MacroOpen", index: elemArray[0].index})
+                }
+            }
         }
 
-        
+        fillLineArray()
         handleStacked()
-        matchStacked()
-        
-        console.log(wikiTemp)
+        // DEPR__matchStacked()
+
+        console.log(lineArray)
     }
 
     parse() {

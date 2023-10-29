@@ -64,3 +64,7 @@ export class Range {
         return { status: "UNDEFINED", common: null };
     }
 }
+
+export function seekEOL(text: string, offset = 0) {
+    return text.indexOf("\n", offset);
+}
