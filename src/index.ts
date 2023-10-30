@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { Elem, HeadingElem, HolderElem, HolderType } from "./elem"
+import { Elem, FoldingBracketElem, HeadingElem, HolderElem, HolderType, HtmlBracketElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem } from "./elem"
 
 export class NamuMark {
     wikiText: string = "";
@@ -103,7 +103,7 @@ export class NamuMark {
     }
 
     parseHolderElem() {
-        type StackedType = {[k in HolderType]: {holder: HolderElem, index: number}[][]}
+        type StackedType = {[k in HolderType]: ({holder: HolderElem, index: number}[][] | undefined)}
         const stacked: StackedType = {} as StackedType
         const substringRange = (range: Range) => {
             return this.wikiText.substring(range.start, range.end)
@@ -115,8 +115,8 @@ export class NamuMark {
                 if (stacked[holder.type] === undefined) {
                     stacked[holder.type] = [];
                 }
-    
-                let currentStacked = stacked[holder.type]
+                
+                let currentStacked = stacked[holder.type] ?? [];
                 let currentStackedLast = currentStacked.at(-1)
                 const result = {holder, index}
                 if (currentStackedLast === undefined) {
@@ -135,101 +135,124 @@ export class NamuMark {
             }
         }
         const matchStacked = () => {
-            for (const elem of stacked.HeadingOpen.flat()) {
-                const openElem = elem.holder;
-                // 같은 라인에 있는지 체크
-                const openElemLine = this.eolHolderArray.find(v => v.range.isSame(openElem.eolRange)) 
-                if (openElemLine === undefined || openElemLine.holders === null) {
-                    continue;
-                }
-                const closeElem = openElemLine.holders.find(v => v.type === "HeadingClose")
-                if (closeElem === undefined) {
-                    continue;
+            const headingMatch = () => {
+                if (stacked.HeadingOpen === undefined || stacked.HeadingClose === undefined) {
+                    return;
                 }
 
-                // 같은 레벨인지 체크
-                const openElemString = substringRange(openElem.range)
-                const closeElemString = substringRange(closeElem.range)
-                const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
-                const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
-                const startGroup = startRegex.exec(openElemString)?.groups
-                const endGroup = endRegex.exec(closeElemString)?.groups
-                const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
-
-                if (!isSameKind) {
-                    continue;
+                for (const elem of stacked.HeadingOpen.flat()) {
+                    const openElem = elem.holder;
+                    // 같은 라인에 있는지 체크
+                    const openElemLine = this.eolHolderArray.find(v => v.range.isSame(openElem.eolRange)) 
+                    if (openElemLine === undefined || openElemLine.holders === null) {
+                        continue;
+                    }
+                    const closeElem = openElemLine.holders.find(v => v.type === "HeadingClose")
+                    if (closeElem === undefined) {
+                        continue;
+                    }
+    
+                    // 같은 레벨인지 체크
+                    const openElemString = substringRange(openElem.range)
+                    const closeElemString = substringRange(closeElem.range)
+                    const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
+                    const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
+                    const startGroup = startRegex.exec(openElemString)?.groups
+                    const endGroup = endRegex.exec(closeElemString)?.groups
+                    const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
+    
+                    if (!isSameKind) {
+                        continue;
+                    }
+                    // push
+                    const level = startGroup?.level.length ?? 0
+                    const isHidden = startGroup?.hide ? true : false
+    
+                    this.headingLevelAt[level - 1] += 1;
+                    this.headingLevelAt.fill(0, level);
+    
+                    wikiTemp.push(new HeadingElem(new Range(openElem.range.start, closeElem.range.end), level, isHidden, [...this.headingLevelAt]))
                 }
-                // push
-                const level = startGroup?.level.length ?? 0
-                const isHidden = startGroup?.hide ? true : false
-
-                this.headingLevelAt[level - 1] += 1;
-                this.headingLevelAt.fill(0, level);
-
-                wikiTemp.push(new HeadingElem(new Range(openElem.range.start, closeElem.range.end), level, isHidden, [...this.headingLevelAt]))
             }
-            for (const elem of stacked.TripleBracketOpen) {
-                const openElem = elem[0];
-                const closeElem = stacked.TripleBracketClose.find(v => v.length !== 0 && v[0].index > openElem.index)
-                if (closeElem === undefined) {
-                    continue;
-                }
 
+            const tripleBracketMatch = () => {
+                if (stacked.TripleBracketOpen === undefined || stacked.TripleBracketClose === undefined) {
+                    return
+                }
                 
+                for (const elem of stacked.TripleBracketOpen) {
+                    const openElem = elem[0]; // first
+                    const closeElemArr = stacked.TripleBracketClose.find(v => v.length !== 0 && v[0].index > openElem.index) // first
+                    if (closeElemArr === undefined) {
+                        continue;
+                    }
+                    const closeElem = closeElemArr[0]
+    
+                    // texteffect, wiki, folding, syntax, raw, html
+                    const syntaxRegex = /^{{{#!syntax (?<lang>basic|cpp|csharp|css|erlang|go|html|java(?:script)?|json|kotlin|lisp|lua|markdown|objectivec|perl|php|powershell|python|ruby|rust|sh|sql|swift|typescript|xml)/g;
+                    const textSizeRegex = /^{{{(?<size>(?:\+|-)(?:[1-5]))/g;
+                    const cssColor =
+                        "black|gray|grey|silver|white|red|maroon|yellow|olive|lime|green|aqua|cyan|teal|blue|navy|magenta|fuchsia|purple|dimgray|dimgrey|darkgray|darkgrey|lightgray|lightgrey|gainsboro|whitesmoke|brown|darkred|firebrick|indianred|lightcoral|rosybrown|snow|mistyrose|salmon|tomato|darksalmon|coral|orangered|lightsalmon|sienna|seashell|chocolate|saddlebrown|sandybrown|peachpuff|peru|linen|bisque|darkorange|burlywood|anaatiquewhite|tan|navajowhite|blanchedalmond|papayawhip|moccasin|orange|wheat|oldlace|floralwhite|darkgoldenrod|goldenrod|cornsilk|gold|khaki|lemonchiffon|palegoldenrod|darkkhaki|beige|ivory|lightgoldenrodyellow|lightyellow|olivedrab|yellowgreen|darkolivegreen|greenyellow|chartreuse|lawngreen|darkgreen|darkseagreen|forestgreen|honeydew|lightgreen|limegreen|palegreen|seagreen|mediumseagreen|springgreen|mintcream|mediumspringgreen|mediumaquamarine|aquamarine|turquoise|lightseagreen|mediumturquoise|azure|darkcyan|darkslategray|darkslategrey|lightcyan|paleturquoise|darkturquoise|cadetblue|powderblue|lightblue|deepskyblue|skyblue|lightskyblue|steelblue|aliceblue|dodgerblue|lightslategray|lightslategrey|slategray|slategrey|lightsteelblue|comflowerblue|royalblue|darkblue|ghostwhite|lavender|mediumblue|midnightblue|slateblue|darkslateblue|mediumslateblue|mediumpurple|rebeccapurple|blueviolet|indigo|darkorchid|darkviolet|mediumorchid|darkmagenta|plum|thistle|violet|orchid|mediumvioletred|deeppink|hotpink|lavenderblush|palevioletred|crimson|pink|lightpink";
+                    const hexCode = "(?:[0-9a-fA-F]{3}){1,2}";
+                    const textColorRegex = new RegExp(`^(?<primary>#(${cssColor}|${hexCode}))(?:\,(?<secondary>#(${cssColor}|${hexCode})))?`, "g");
+                    const htmlRegex = /^{{{#!html/g;
+                    const foldingRegex = /^{{{#!folding(?<summary>.+)?/g;
+                    const wikiRegex = /^{{{#!wiki(?:(.+)?style="(?<style>[^"]+)?")?/g;
+                    // otherwise, just raw
+    
+                    const targetedString = substringRange(new Range(openElem.holder.range.start, openElem.holder.eolRange.end))
+                    const resultRange = new Range(openElem.holder.range.start, closeElem.holder.range.end);
+    
+                    const syntaxExecResult = syntaxRegex.exec(targetedString)
+                    const textSizeExecResult = textSizeRegex.exec(targetedString)
+                    const textColorExecResult = textColorRegex.exec(targetedString)
+                    const htmlExecResult = htmlRegex.exec(targetedString)
+                    const foldingExecResult = foldingRegex.exec(targetedString)
+                    const wikiExecResult = wikiRegex.exec(targetedString)
+    
+                    if (syntaxExecResult !== null) {
+                        wikiTemp.push(new SyntaxBracketElem(resultRange, syntaxExecResult.groups?.lang as SyntaxLanguageType))
+                        continue;
+                    }
+                    if (textSizeExecResult !== null) {
+                        wikiTemp.push(new TextSizeBracketElem(resultRange, textSizeExecResult.groups?.size as TextSizeType))
+                        continue;
+                    }
+    
+                    if (textColorExecResult !== null) {
+                        wikiTemp.push(new TextColorBracketElem(resultRange, textColorExecResult.groups?.primary as string, textColorExecResult.groups?.secondary))
+                        continue;
+                    }
+    
+                    if (htmlExecResult !== null) {
+                        wikiTemp.push(new HtmlBracketElem(resultRange))
+                    }
+    
+                    if (openElem.holder.eolRange.isSame(closeElem.holder.eolRange) /* same line */) {
+                        // folding, wiki 제외
+                        wikiTemp.push(new RawBracketElem(resultRange, false))
+                    } else {
+                        if (foldingExecResult !== null) {
+                            wikiTemp.push(new FoldingBracketElem(resultRange, foldingExecResult.groups?.summary))
+                            continue;
+                        }
+        
+                        if (wikiExecResult !== null) {
+                            wikiTemp.push(new WikiBracketElem(resultRange, wikiExecResult.groups?.style))
+                            continue;
+                        }
+    
+                        wikiTemp.push(new RawBracketElem(resultRange, true))
+                    }
+                }
             }
+            headingMatch();
+            tripleBracketMatch();
         }
-        // const DEPR__matchStacked = () => {
-        //     for (const elemArray of stacked.HeadingOpen) {
-        //         const elem = elemArray[0];
-        //         const headingCloseFlatted = stacked.HeadingClose.flat();
 
-        //         // pair가 있는지 확인
-        //         const foundPair = headingCloseFlatted.find(v => v.index > elem.index)
-        //         if (foundPair === undefined) {
-        //             continue;
-        //         }
-        //         // heading 맞추기
-        //         const elemRange = findHolderElemRange(elem.uuid)
-        //         const foundPairRange = findHolderElemRange(foundPair.uuid)
-        //         const elemString = substringRange(elemRange)
-        //         const foundPairString = substringRange(foundPairRange)
-
-        //         const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
-        //         const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
-        //         const startGroup = startRegex.exec(elemString)?.groups
-        //         const endGroup = endRegex.exec(foundPairString)?.groups
-        //         const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
-                
-        //         if (!isSameKind) {
-        //             continue;
-        //         }
-        //         // \n 감지 todo
-        //         const headingContentString = substringRange(new Range(elemRange.end, foundPairRange.start));
-        //         if (headingContentString.indexOf("\n") !== -1) {
-        //             continue;
-        //         }
-
-        //         const level = startGroup?.level.length ?? 0
-        //         const isHidden = startGroup?.hide ? true : false
-
-        //         this.headingLevelAt[level - 1] += 1;
-        //         this.headingLevelAt.fill(0, level);
-
-        //         wikiTemp.push(new HeadingElem(new Range(elemRange.start, foundPairRange.end), level, isHidden, [...this.headingLevelAt]))
-        //     }
-        //     type FlagType = "MacroOpen"
-        //     const flag: {type: FlagType, index: number}[] = []
-        //     for (const elemArray of stacked.SquareBracketOpen) {
-        //         if (elemArray.length === 1) {
-        //             flag.push({type: "MacroOpen", index: elemArray[0].index})
-        //         }
-        //     }
-        // }
         handleStacked()
         matchStacked()
-        // console.log(this.eolHolderArray)
         console.log(wikiTemp)
-        // DEPR__matchStacked()
     }
 
     parse() {

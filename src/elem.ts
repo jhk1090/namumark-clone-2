@@ -53,15 +53,25 @@ export class FoldingBracketElem extends AbleChild {
     }
 }
 
-export class RawBracketElem extends AbleChild {
+export class HtmlBracketElem extends AbleChild {
     constructor(range: Range) {
         super(range)
     }
 }
 
+export class RawBracketElem extends AbleChild {
+    isMultiline: boolean = false
+    constructor(range: Range, isMultiline: boolean = false) {
+        super(range)
+        this.isMultiline = isMultiline
+    }
+}
+
+export abstract class TextEffectBracketElem extends AbleChild {}
+
 type NumberRangeType = "1" | "2" | "3" | "4" | "5";
 export type TextSizeType = `-${NumberRangeType}` | `+${NumberRangeType}` | ""
-export class TextSizeBracketElem extends AbleChild {
+export class TextSizeBracketElem extends TextEffectBracketElem {
     size: TextSizeType = ""
     constructor(range: Range, size: TextSizeType) {
         super(range)
@@ -69,7 +79,7 @@ export class TextSizeBracketElem extends AbleChild {
     }
 }
 
-export class TextColorBracketElem extends AbleChild {
+export class TextColorBracketElem extends TextEffectBracketElem {
     primary: string = ""
     secondary?: string
     constructor(range: Range, primary: string, secondary?: string) {
