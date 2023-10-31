@@ -5,8 +5,10 @@ export abstract class Elem {
     uuid: string = uuidv4();
     range: Range = new Range(0, 1);
     parentUUID: string | null = null;
-    constructor(range: Range) {
+    isMultiline: boolean = false;
+    constructor(range: Range, isMultiline: boolean) {
         this.range = range;
+        this.isMultiline = isMultiline;
     }
     setParent(uuid: string) { this.parentUUID = uuid }
 }
@@ -15,55 +17,63 @@ export abstract class UnableChild extends Elem {}
 
 export abstract class AbleChild extends Elem {}
 
+interface IHeadingElem {
+    range: Range;
+    headingLevel: number;
+    isHeadingHidden: boolean;
+    headingLevelAt: number[];
+}
 export class HeadingElem extends AbleChild {
     headingLevel: number = 0;
     isHeadingHidden: boolean = false;
     haedingLevelAt: number[] = [];
-    constructor(range: Range, headingLevel: number, isHeadingHidden: boolean, headingLevelAt: number[]) {
-        super(range)
-        this.headingLevel = headingLevel;
-        this.isHeadingHidden = isHeadingHidden;
-        this.haedingLevelAt = headingLevelAt;
+    constructor(groups: IHeadingElem) {
+        super(groups.range, false)
+        this.headingLevel = groups.headingLevel;
+        this.isHeadingHidden = groups.isHeadingHidden;
+        this.haedingLevelAt = groups.headingLevelAt;
     }
 }
 
-export type SyntaxLanguageType = "basic"| "cpp"| "csharp"| "css"| "erlang"| "go"| "html"| "java"| "javascript"| "json"| "kotlin"| "lisp"| "lua"| "markdown"| "objectivec"| "perl"| "php"| "powershell"| "python"| "ruby"| "rust"| "sh"| "sql"| "swift"| "typescript"| "xml" | ""
+interface IBracketElem {
+    range: Range;
+    isMultiline: boolean;
+}
 
+export type SyntaxLanguageType = "basic"| "cpp"| "csharp"| "css"| "erlang"| "go"| "html"| "java"| "javascript"| "json"| "kotlin"| "lisp"| "lua"| "markdown"| "objectivec"| "perl"| "php"| "powershell"| "python"| "ruby"| "rust"| "sh"| "sql"| "swift"| "typescript"| "xml" | ""
 export class SyntaxBracketElem extends AbleChild {
     language: SyntaxLanguageType = "";
-    constructor(range: Range, language: SyntaxLanguageType) {
-        super(range)
-        this.language = language;
+    constructor(groups: IBracketElem & { language: SyntaxLanguageType }) {
+        super(groups.range, groups.isMultiline)
+        this.language = groups.language;
     }
 }
 
 export class WikiBracketElem extends AbleChild {
     style: string | undefined = undefined;
-    constructor(range: Range, style?: string) {
-        super(range)
-        this.style = style;
+    constructor(groups: IBracketElem & { style?: string }) {
+        super(groups.range, groups.isMultiline)
+        this.style = groups.style;
     }
 }
 
 export class FoldingBracketElem extends AbleChild {
     summary: string = ""
-    constructor(range: Range, summary?: string) {
-        super(range)
-        this.summary = summary ?? "More";
+    constructor(groups: IBracketElem & { summary?: string }) {
+        super(groups.range, groups.isMultiline)
+        this.summary = groups.summary ?? "More";
     }
 }
 
 export class HtmlBracketElem extends AbleChild {
-    constructor(range: Range) {
-        super(range)
+    constructor(groups: IBracketElem) {
+        super(groups.range, groups.isMultiline)
     }
 }
 
 export class RawBracketElem extends AbleChild {
-    isMultiline: boolean = false
-    constructor(range: Range, isMultiline: boolean = false) {
-        super(range)
-        this.isMultiline = isMultiline
+    constructor(groups: IBracketElem) {
+        super(groups.range, groups.isMultiline)
     }
 }
 
@@ -73,19 +83,19 @@ type NumberRangeType = "1" | "2" | "3" | "4" | "5";
 export type TextSizeType = `-${NumberRangeType}` | `+${NumberRangeType}` | ""
 export class TextSizeBracketElem extends TextEffectBracketElem {
     size: TextSizeType = ""
-    constructor(range: Range, size: TextSizeType) {
-        super(range)
-        this.size = size;
+    constructor(groups: IBracketElem & { size: TextSizeType }) {
+        super(groups.range, groups.isMultiline)
+        this.size = groups.size;
     }
 }
 
 export class TextColorBracketElem extends TextEffectBracketElem {
     primary: string = ""
     secondary?: string
-    constructor(range: Range, primary: string, secondary?: string) {
-        super(range)
-        this.primary = primary;
-        this.secondary = secondary;
+    constructor(groups: IBracketElem & { primary: string; secondary?: string }) {
+        super(groups.range, groups.isMultiline)
+        this.primary = groups.primary;
+        this.secondary = groups.secondary;
     }
 }
 

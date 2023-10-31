@@ -171,7 +171,14 @@ export class NamuMark {
                     this.headingLevelAt[level - 1] += 1;
                     this.headingLevelAt.fill(0, level);
     
-                    wikiTemp.push(new HeadingElem(new Range(openElem.range.start, closeElem.range.end), level, isHidden, [...this.headingLevelAt]))
+                    wikiTemp.push(
+                        new HeadingElem({
+                            range: new Range(openElem.range.start, closeElem.range.end),
+                            headingLevel: level,
+                            isHeadingHidden: isHidden,
+                            headingLevelAt: [...this.headingLevelAt],
+                        })
+                    );
                 }
             }
 
@@ -209,41 +216,45 @@ export class NamuMark {
                     const htmlExecResult = htmlRegex.exec(targetedString)
                     const foldingExecResult = foldingRegex.exec(targetedString)
                     const wikiExecResult = wikiRegex.exec(targetedString)
-    
+                    const isMultiline = !(openElem.holder.eolRange.isSame(closeElem.holder.eolRange) /* same line */)
+                    const defaultProvider = { range: resultRange, isMultiline }
+
                     if (syntaxExecResult !== null) {
-                        wikiTemp.push(new SyntaxBracketElem(resultRange, syntaxExecResult.groups?.lang as SyntaxLanguageType))
+                        wikiTemp.push(new SyntaxBracketElem({ ...defaultProvider, language: syntaxExecResult.groups?.lang as SyntaxLanguageType }));
                         continue;
                     }
                     if (textSizeExecResult !== null) {
-                        wikiTemp.push(new TextSizeBracketElem(resultRange, textSizeExecResult.groups?.size as TextSizeType))
+                        wikiTemp.push(new TextSizeBracketElem({ ...defaultProvider, size: textSizeExecResult.groups?.size as TextSizeType }));
                         continue;
                     }
-    
+
                     if (textColorExecResult !== null) {
-                        wikiTemp.push(new TextColorBracketElem(resultRange, textColorExecResult.groups?.primary as string, textColorExecResult.groups?.secondary))
+                        wikiTemp.push(
+                            new TextColorBracketElem({
+                                ...defaultProvider,
+                                primary: textColorExecResult.groups?.primary as string,
+                                secondary: textColorExecResult.groups?.secondary,
+                            })
+                        );
                         continue;
                     }
-    
+
                     if (htmlExecResult !== null) {
-                        wikiTemp.push(new HtmlBracketElem(resultRange))
+                        wikiTemp.push(new HtmlBracketElem({ ...defaultProvider }));
+                        continue;
                     }
-    
-                    if (openElem.holder.eolRange.isSame(closeElem.holder.eolRange) /* same line */) {
-                        // folding, wiki 제외
-                        wikiTemp.push(new RawBracketElem(resultRange, false))
-                    } else {
-                        if (foldingExecResult !== null) {
-                            wikiTemp.push(new FoldingBracketElem(resultRange, foldingExecResult.groups?.summary))
-                            continue;
-                        }
-        
-                        if (wikiExecResult !== null) {
-                            wikiTemp.push(new WikiBracketElem(resultRange, wikiExecResult.groups?.style))
-                            continue;
-                        }
-    
-                        wikiTemp.push(new RawBracketElem(resultRange, true))
+
+                    if (foldingExecResult !== null && isMultiline) {
+                        wikiTemp.push(new FoldingBracketElem({ ...defaultProvider, summary: foldingExecResult.groups?.summary }));
+                        continue;
                     }
+
+                    if (wikiExecResult !== null && isMultiline) {
+                        wikiTemp.push(new WikiBracketElem({ ...defaultProvider, style: wikiExecResult.groups?.style }));
+                        continue;
+                    }
+
+                    wikiTemp.push(new RawBracketElem({ ...defaultProvider }));
                 }
             }
             headingMatch();
