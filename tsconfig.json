@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
       "target": "ES2016",
-      "lib": ["dom", "dom.iterable", "esnext"],
+      "lib": ["dom", "dom.iterable", "esnext", "ES2023.Array"],
       "outDir": "./out",
       "rootDir": "./src",
       "skipLibCheck": true,

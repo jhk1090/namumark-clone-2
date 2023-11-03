@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { Elem, FoldingBracketElem, HeadingElem, HolderElem, HolderType, HtmlBracketElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem } from "./elem"
+import { CommentElem, Elem, FoldingBracketElem, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem } from "./elem"
 
 export class NamuMark {
     wikiText: string = "";
@@ -72,8 +72,8 @@ export class NamuMark {
         const squareBracketOpen: offsetNone = [/\[/g, "SquareBracketOpen"];
         // footnoteclose, linkclose, macroclose
         const squareBracketClose: offsetNone = [/\]/g, "SquareBracketClose"];
-        const macroArgumentOpen: offsetNone = [/\(/g, "MacroArgumentOpen"];
-        const macroArgumentClose: offsetNone = [/\)/g, "MacroArgumentClose"];
+        const macroArgumentOpen: offsetNone = [/\(/g, "ParenthesisOpen"];
+        const macroArgumentClose: offsetNone = [/\)/g, "ParenthesisClose"];
         const headingOpen: offsetOnlyStart = [/\n={1,6}(#?) /g, "HeadingOpen", 1];
         const headingClose: offsetBoth = [/ (#?)={1,6}\n/g, "HeadingClose", undefined, -1];
         const tripleBracketOpen: offsetNone = [/\{\{\{/g, "TripleBracketOpen"];
@@ -103,7 +103,8 @@ export class NamuMark {
     }
 
     parseHolderElem() {
-        type StackedType = {[k in HolderType]: ({holder: HolderElem, index: number}[][] | undefined)}
+        type HolderIndexType = {holder: HolderElem, index: number};
+        type StackedType = {[k in HolderType]: (HolderIndexType[] | undefined)}
         const stacked: StackedType = {} as StackedType
         const substringRange = (range: Range) => {
             return this.wikiText.substring(range.start, range.end)
@@ -117,17 +118,7 @@ export class NamuMark {
                 }
                 
                 let currentStacked = stacked[holder.type] ?? [];
-                let currentStackedLast = currentStacked.at(-1)
-                const result = {holder, index}
-                if (currentStackedLast === undefined) {
-                    currentStacked.push([result])
-                } else {
-                    if (currentStackedLast.at(-1)?.holder.range.isAdjacent(holder.range)) {
-                        currentStackedLast.push(result);
-                    } else {
-                        currentStacked.push([result])
-                    }
-                }
+                currentStacked.push({holder, index})
             }
     
             for (let idx = 0; idx < this.holderArray.length; idx++) {
@@ -135,12 +126,21 @@ export class NamuMark {
             }
         }
         const matchStacked = () => {
+            const commentMatch = () => {
+                if (stacked.Comment === undefined) {
+                    return;
+                }
+
+                for (const elem of stacked.Comment) {
+                    wikiTemp.push(new CommentElem({ range: elem.holder.range }))
+                }
+            }
             const headingMatch = () => {
                 if (stacked.HeadingOpen === undefined || stacked.HeadingClose === undefined) {
                     return;
                 }
 
-                for (const elem of stacked.HeadingOpen.flat()) {
+                for (const elem of stacked.HeadingOpen) {
                     const openElem = elem.holder;
                     // 같은 라인에 있는지 체크
                     const openElemLine = this.eolHolderArray.find(v => v.range.isSame(openElem.eolRange)) 
@@ -184,81 +184,231 @@ export class NamuMark {
 
             const tripleBracketMatch = () => {
                 if (stacked.TripleBracketOpen === undefined || stacked.TripleBracketClose === undefined) {
-                    return
+                    return;
                 }
                 
-                for (const elem of stacked.TripleBracketOpen) {
-                    const openElem = elem[0]; // first
-                    const closeElemArr = stacked.TripleBracketClose.find(v => v.length !== 0 && v[0].index > openElem.index) // first
-                    if (closeElemArr === undefined) {
-                        continue;
-                    }
-                    const closeElem = closeElemArr[0]
-    
-                    // texteffect, wiki, folding, syntax, raw, html
-                    const syntaxRegex = /^{{{#!syntax (?<lang>basic|cpp|csharp|css|erlang|go|html|java(?:script)?|json|kotlin|lisp|lua|markdown|objectivec|perl|php|powershell|python|ruby|rust|sh|sql|swift|typescript|xml)/g;
-                    const textSizeRegex = /^{{{(?<size>(?:\+|-)(?:[1-5]))/g;
-                    const cssColor =
-                        "black|gray|grey|silver|white|red|maroon|yellow|olive|lime|green|aqua|cyan|teal|blue|navy|magenta|fuchsia|purple|dimgray|dimgrey|darkgray|darkgrey|lightgray|lightgrey|gainsboro|whitesmoke|brown|darkred|firebrick|indianred|lightcoral|rosybrown|snow|mistyrose|salmon|tomato|darksalmon|coral|orangered|lightsalmon|sienna|seashell|chocolate|saddlebrown|sandybrown|peachpuff|peru|linen|bisque|darkorange|burlywood|anaatiquewhite|tan|navajowhite|blanchedalmond|papayawhip|moccasin|orange|wheat|oldlace|floralwhite|darkgoldenrod|goldenrod|cornsilk|gold|khaki|lemonchiffon|palegoldenrod|darkkhaki|beige|ivory|lightgoldenrodyellow|lightyellow|olivedrab|yellowgreen|darkolivegreen|greenyellow|chartreuse|lawngreen|darkgreen|darkseagreen|forestgreen|honeydew|lightgreen|limegreen|palegreen|seagreen|mediumseagreen|springgreen|mintcream|mediumspringgreen|mediumaquamarine|aquamarine|turquoise|lightseagreen|mediumturquoise|azure|darkcyan|darkslategray|darkslategrey|lightcyan|paleturquoise|darkturquoise|cadetblue|powderblue|lightblue|deepskyblue|skyblue|lightskyblue|steelblue|aliceblue|dodgerblue|lightslategray|lightslategrey|slategray|slategrey|lightsteelblue|comflowerblue|royalblue|darkblue|ghostwhite|lavender|mediumblue|midnightblue|slateblue|darkslateblue|mediumslateblue|mediumpurple|rebeccapurple|blueviolet|indigo|darkorchid|darkviolet|mediumorchid|darkmagenta|plum|thistle|violet|orchid|mediumvioletred|deeppink|hotpink|lavenderblush|palevioletred|crimson|pink|lightpink";
-                    const hexCode = "(?:[0-9a-fA-F]{3}){1,2}";
-                    const textColorRegex = new RegExp(`^(?<primary>#(${cssColor}|${hexCode}))(?:\,(?<secondary>#(${cssColor}|${hexCode})))?`, "g");
-                    const htmlRegex = /^{{{#!html/g;
-                    const foldingRegex = /^{{{#!folding(?<summary>.+)?/g;
-                    const wikiRegex = /^{{{#!wiki(?:(.+)?style="(?<style>[^"]+)?")?/g;
-                    // otherwise, just raw
-    
-                    const targetedString = substringRange(new Range(openElem.holder.range.start, openElem.holder.eolRange.end))
-                    const resultRange = new Range(openElem.holder.range.start, closeElem.holder.range.end);
-    
-                    const syntaxExecResult = syntaxRegex.exec(targetedString)
-                    const textSizeExecResult = textSizeRegex.exec(targetedString)
-                    const textColorExecResult = textColorRegex.exec(targetedString)
-                    const htmlExecResult = htmlRegex.exec(targetedString)
-                    const foldingExecResult = foldingRegex.exec(targetedString)
-                    const wikiExecResult = wikiRegex.exec(targetedString)
-                    const isMultiline = !(openElem.holder.eolRange.isSame(closeElem.holder.eolRange) /* same line */)
-                    const defaultProvider = { range: resultRange, isMultiline }
+                let pairs: [[HolderIndexType, HolderIndexType]] | undefined; // [open, close]
+                let tripleBracketTemp: Elem[] = [];
 
-                    if (syntaxExecResult !== null) {
-                        wikiTemp.push(new SyntaxBracketElem({ ...defaultProvider, language: syntaxExecResult.groups?.lang as SyntaxLanguageType }));
-                        continue;
-                    }
-                    if (textSizeExecResult !== null) {
-                        wikiTemp.push(new TextSizeBracketElem({ ...defaultProvider, size: textSizeExecResult.groups?.size as TextSizeType }));
-                        continue;
+                const doPairing = () => {
+                    if (stacked.TripleBracketOpen === undefined || stacked.TripleBracketClose === undefined) {
+                        return;
                     }
 
-                    if (textColorExecResult !== null) {
-                        wikiTemp.push(
-                            new TextColorBracketElem({
-                                ...defaultProvider,
-                                primary: textColorExecResult.groups?.primary as string,
-                                secondary: textColorExecResult.groups?.secondary,
-                            })
+                    const concattedArray = [...stacked.TripleBracketOpen, ...stacked.TripleBracketClose].sort((a, b) => a.index - b.index);
+                    let openStack: HolderIndexType[] = [];
+                    let closeStack: HolderIndexType[] = [];
+
+                    const fillPair = () => {
+                        const reversedOpenStack = openStack.toReversed();
+                        let i = 0;
+                        for (; i < closeStack.length; i++) {
+                            if (reversedOpenStack[i] === undefined) {
+                                closeStack = [];
+                                break;
+                            }
+                            if (pairs === undefined) {
+                                pairs = [[reversedOpenStack[i], closeStack[i]]];
+                            } else {
+                                pairs.push([reversedOpenStack[i], closeStack[i]]);
+                            }
+                        }
+                        // clean
+                        while (i !== 0) {
+                            openStack.pop();
+                            closeStack.splice(0, 1);
+                            i--;
+                        }
+                    };
+
+                    for (const concattedElem of concattedArray) {
+                        if (concattedElem.holder.type === "TripleBracketOpen") {
+                            if (closeStack.length !== 0) {
+                                fillPair();
+                            }
+                            openStack.push(concattedElem);
+                        }
+                        if (concattedElem.holder.type === "TripleBracketClose") {
+                            closeStack.push(concattedElem);
+                        }
+                    }
+
+                    fillPair();
+                };
+                const decideElemType = () => {
+                    if (pairs === undefined) {
+                        return;
+                    }
+
+                    for (const pair of pairs) {
+                        const [openElem, closeElem] = pair;
+
+                        // texteffect, wiki, folding, syntax, raw, html
+                        const syntaxRegex =
+                            /^{{{#!syntax (?<lang>basic|cpp|csharp|css|erlang|go|html|java(?:script)?|json|kotlin|lisp|lua|markdown|objectivec|perl|php|powershell|python|ruby|rust|sh|sql|swift|typescript|xml)/g;
+                        const textSizeRegex = /^{{{(?<size>(?:\+|-)(?:[1-5]))/g;
+                        const cssColor =
+                            "black|gray|grey|silver|white|red|maroon|yellow|olive|lime|green|aqua|cyan|teal|blue|navy|magenta|fuchsia|purple|dimgray|dimgrey|darkgray|darkgrey|lightgray|lightgrey|gainsboro|whitesmoke|brown|darkred|firebrick|indianred|lightcoral|rosybrown|snow|mistyrose|salmon|tomato|darksalmon|coral|orangered|lightsalmon|sienna|seashell|chocolate|saddlebrown|sandybrown|peachpuff|peru|linen|bisque|darkorange|burlywood|anaatiquewhite|tan|navajowhite|blanchedalmond|papayawhip|moccasin|orange|wheat|oldlace|floralwhite|darkgoldenrod|goldenrod|cornsilk|gold|khaki|lemonchiffon|palegoldenrod|darkkhaki|beige|ivory|lightgoldenrodyellow|lightyellow|olivedrab|yellowgreen|darkolivegreen|greenyellow|chartreuse|lawngreen|darkgreen|darkseagreen|forestgreen|honeydew|lightgreen|limegreen|palegreen|seagreen|mediumseagreen|springgreen|mintcream|mediumspringgreen|mediumaquamarine|aquamarine|turquoise|lightseagreen|mediumturquoise|azure|darkcyan|darkslategray|darkslategrey|lightcyan|paleturquoise|darkturquoise|cadetblue|powderblue|lightblue|deepskyblue|skyblue|lightskyblue|steelblue|aliceblue|dodgerblue|lightslategray|lightslategrey|slategray|slategrey|lightsteelblue|comflowerblue|royalblue|darkblue|ghostwhite|lavender|mediumblue|midnightblue|slateblue|darkslateblue|mediumslateblue|mediumpurple|rebeccapurple|blueviolet|indigo|darkorchid|darkviolet|mediumorchid|darkmagenta|plum|thistle|violet|orchid|mediumvioletred|deeppink|hotpink|lavenderblush|palevioletred|crimson|pink|lightpink";
+                        const hexCode = "(?:[0-9a-fA-F]{3}){1,2}";
+                        const textColorRegex = new RegExp(
+                            `^(?<primary>#(${cssColor}|${hexCode}))(?:\,(?<secondary>#(${cssColor}|${hexCode})))?`,
+                            "g"
                         );
-                        continue;
-                    }
+                        const htmlRegex = /^{{{#!html/g;
+                        const foldingRegex = /^{{{#!folding(?<summary>.+)?/g;
+                        const wikiRegex = /^{{{#!wiki(?:(.+)?style="(?<style>[^"]+)?")?/g;
+                        // otherwise, just raw
 
-                    if (htmlExecResult !== null) {
-                        wikiTemp.push(new HtmlBracketElem({ ...defaultProvider }));
-                        continue;
-                    }
+                        const targetedString = substringRange(new Range(openElem.holder.range.start, openElem.holder.eolRange.end));
+                        const resultRange = new Range(openElem.holder.range.start, closeElem.holder.range.end);
 
-                    if (foldingExecResult !== null && isMultiline) {
-                        wikiTemp.push(new FoldingBracketElem({ ...defaultProvider, summary: foldingExecResult.groups?.summary }));
-                        continue;
-                    }
+                        const syntaxExecResult = syntaxRegex.exec(targetedString);
+                        const textSizeExecResult = textSizeRegex.exec(targetedString);
+                        const textColorExecResult = textColorRegex.exec(targetedString);
+                        const htmlExecResult = htmlRegex.exec(targetedString);
+                        const foldingExecResult = foldingRegex.exec(targetedString);
+                        const wikiExecResult = wikiRegex.exec(targetedString);
+                        const isMultiline = !openElem.holder.eolRange.isSame(closeElem.holder.eolRange);
+                        const defaultProvider = { range: resultRange, isMultiline };
 
-                    if (wikiExecResult !== null && isMultiline) {
-                        wikiTemp.push(new WikiBracketElem({ ...defaultProvider, style: wikiExecResult.groups?.style }));
-                        continue;
-                    }
+                        if (syntaxExecResult !== null) {
+                            tripleBracketTemp.push(
+                                new SyntaxBracketElem({ ...defaultProvider, language: syntaxExecResult.groups?.lang as SyntaxLanguageType })
+                            );
+                            continue;
+                        }
+                        if (textSizeExecResult !== null) {
+                            tripleBracketTemp.push(new TextSizeBracketElem({ ...defaultProvider, size: textSizeExecResult.groups?.size as TextSizeType }));
+                            continue;
+                        }
 
-                    wikiTemp.push(new RawBracketElem({ ...defaultProvider }));
-                }
+                        if (textColorExecResult !== null) {
+                            tripleBracketTemp.push(
+                                new TextColorBracketElem({
+                                    ...defaultProvider,
+                                    primary: textColorExecResult.groups?.primary as string,
+                                    secondary: textColorExecResult.groups?.secondary,
+                                })
+                            );
+                            continue;
+                        }
+
+                        if (htmlExecResult !== null) {
+                            tripleBracketTemp.push(new HtmlBracketElem({ ...defaultProvider }));
+                            continue;
+                        }
+
+                        if (foldingExecResult !== null && isMultiline) {
+                            tripleBracketTemp.push(new FoldingBracketElem({ ...defaultProvider, summary: foldingExecResult.groups?.summary }));
+                            continue;
+                        }
+
+                        if (wikiExecResult !== null && isMultiline) {
+                            tripleBracketTemp.push(new WikiBracketElem({ ...defaultProvider, style: wikiExecResult.groups?.style }));
+                            continue;
+                        }
+
+                        tripleBracketTemp.push(new RawBracketElem({ ...defaultProvider }));
+                    }
+                };
+                /* const checkCollision = () => {
+                    const excludeIndices: number[] = [];
+                    for (const [i, outerElem] of tripleBracketTemp.entries()) {
+                        if (outerElem instanceof SyntaxBracketElem || outerElem instanceof HtmlBracketElem || outerElem instanceof RawBracketElem) {
+                            for (const [j, innerElem] of tripleBracketTemp.entries()) {
+                                if (innerElem.range.isSame(outerElem.range)) continue;
+                                if (excludeIndices.includes(j)) continue;
+                                if (innerElem.range.isContainedIn(outerElem.range)) {
+                                    excludeIndices.push(j)
+                                }
+                            }
+                        }
+                    }
+                    tripleBracketTemp = tripleBracketTemp.filter((_, index) => !excludeIndices.includes(index))
+                } */
+
+                doPairing()
+                decideElemType()
+                // checkCollision()
+                wikiTemp.push(...tripleBracketTemp)
             }
+
+            const parenthesisMatch = () => {
+                if (stacked.ParenthesisOpen === undefined || stacked.ParenthesisClose === undefined) {
+                    return;
+                }
+
+                let pairs: [[HolderIndexType, HolderIndexType]] | undefined;
+                let parenthesisTemp: Elem[] = [];
+
+                const doPairing = () => {
+                    if (stacked.ParenthesisOpen === undefined || stacked.ParenthesisClose === undefined) {
+                        return;
+                    }
+
+                    const concattedArray = [...stacked.ParenthesisOpen, ...stacked.ParenthesisClose].sort((a, b) => a.index - b.index);
+                    let openStack: HolderIndexType[] = [];
+                    let closeStack: HolderIndexType[] = [];
+
+                    const fillPair = () => {
+                        const reversedOpenStack = openStack.toReversed();
+                        let i = 0;
+                        for (; i < closeStack.length; i++) {
+                            if (reversedOpenStack[i] === undefined) {
+                                closeStack = [];
+                                break;
+                            }
+                            if (pairs === undefined) {
+                                pairs = [[reversedOpenStack[i], closeStack[i]]];
+                            } else {
+                                pairs.push([reversedOpenStack[i], closeStack[i]])
+                            }
+                        }
+
+                        while (i !== 0) {
+                            openStack.pop();
+                            closeStack.splice(0, 1);
+                            i--;
+                        }
+                    }
+
+                    for (const concattedElem of concattedArray) {
+                        if (concattedElem.holder.type === "ParenthesisOpen") {
+                            if (closeStack.length !== 0) {
+                                fillPair();
+                            }
+                            openStack.push(concattedElem);
+                        }
+                        if (concattedElem.holder.type === "ParenthesisClose") {
+                            closeStack.push(concattedElem);
+                        }
+                    }
+
+                    fillPair();
+                }
+                const decideElemType = () => {
+                    if (pairs === undefined) {
+                        return;
+                    }
+
+                    for (const pair of pairs) {
+                        const [openElem, closeElem] = pair;
+                        const resultRange = new Range(openElem.holder.range.start, closeElem.holder.range.end);
+                        const isMultiline = !openElem.holder.eolRange.isSame(closeElem.holder.eolRange);
+                        const defaultProvider = { range: resultRange, isMultiline };
+                        parenthesisTemp.push(new ParenthesisElem({ ...defaultProvider }))
+                    }
+                }
+                doPairing();
+                decideElemType();
+
+                wikiTemp.push(...parenthesisTemp)
+            }
+
+            commentMatch();
             headingMatch();
             tripleBracketMatch();
+            parenthesisMatch();
         }
 
         handleStacked()
