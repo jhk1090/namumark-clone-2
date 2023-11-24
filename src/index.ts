@@ -1,5 +1,6 @@
 import { Range, seekEOL } from "./utils";
 import { CommentElem, Elem, FoldingBracketElem, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem } from "./elem"
+const util = require("node:util");
 
 export class NamuMark {
     wikiText: string = "";
@@ -405,15 +406,63 @@ export class NamuMark {
                 wikiTemp.push(...parenthesisTemp)
             }
 
+            const squareBracketMatch = () => {
+                if (stacked.SquareBracketOpen === undefined || stacked.SquareBracketClose === undefined) {
+                    return;
+                }
+
+                const adjSquareBracketOpen: HolderIndexType[][] = [];
+                const adjSquareBracketClose: HolderIndexType[][] = [];
+                let pairs: [[HolderIndexType, HolderIndexType]] | undefined;
+
+                const fillAdjacent = () => {
+                    if (stacked.SquareBracketOpen === undefined || stacked.SquareBracketClose === undefined) {
+                        return;
+                    }
+
+                    for (const openElem of stacked.SquareBracketOpen) {
+                        const lastGroup = adjSquareBracketOpen.at(-1);
+                        if (lastGroup === undefined) {
+                            adjSquareBracketOpen.push([openElem])
+                        } else {
+                            if ((lastGroup.at(-1) as HolderIndexType).holder.range.isAdjacent(openElem.holder.range)) {
+                                lastGroup.push(openElem)
+                            } else {
+                                adjSquareBracketOpen.push([openElem])
+                            }
+                        }
+                    }
+
+                    for (const closeElem of stacked.SquareBracketClose) {
+                        const lastGroup = adjSquareBracketClose.at(-1);
+                        if (lastGroup === undefined) {
+                            adjSquareBracketClose.push([closeElem])
+                        } else {
+                            if ((lastGroup.at(-1) as HolderIndexType).holder.range.isAdjacent(closeElem.holder.range)) {
+                                lastGroup.push(closeElem)
+                            } else {
+                                adjSquareBracketClose.push([closeElem])
+                            }
+                        }
+                    }
+                }
+                
+                fillAdjacent();
+                const property = {showHidden: false, depth: null, colors: true};
+                console.log(util.inspect(adjSquareBracketOpen))
+                console.log(util.inspect(adjSquareBracketClose))
+            }
+
             commentMatch();
             headingMatch();
             tripleBracketMatch();
             parenthesisMatch();
+            squareBracketMatch();
         }
 
         handleStacked()
         matchStacked()
-        console.log(wikiTemp)
+        // console.log(util.inspect(wikiTemp, {showHidden: false, depth: null, colors: true}))
     }
 
     parse() {
