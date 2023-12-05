@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { TripleBracketContentGroup, TripleBracketGroup, CommentElem, ContentGroup, Elem, FoldingBracketElem, Group, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem, SquareBracketGroup, DoubleSquareBracketGroup, SingleSquareBracketGroup, HeadingGroup } from "./elem"
+import { TripleBracketContentGroup, TripleBracketGroup, CommentElem, ContentGroup, Elem, FoldingBracketElem, Group, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem, SquareBracketGroup, DoubleSquareBracketGroup, SingleSquareBracketGroup, HeadingGroup, ListGroup } from "./elem"
 const util = require("node:util");
 
 export class NamuMark {
@@ -108,6 +108,7 @@ export class NamuMark {
         const tripleBracketQueue: HolderElem[] = [];
         let squareBracketArray: { value: HolderElem[], max: number }[] = [];
         let headingOpenElement: HolderElem | undefined = undefined;
+        let listGroup: HolderElem[] | undefined = undefined;
 
         interface ProcessorProps {
             idx: number;
@@ -295,6 +296,62 @@ export class NamuMark {
                 return
             }
         }
+        const processList = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            const indentRegex = /^(?<indent>( ){1,})/g
+            if (listGroup === undefined) {
+                listGroup = [elem];
+                return;
+            }
+            
+            const firstElement = listGroup.at(0) as HolderElem;
+            const lastElement = listGroup.at(-1) as HolderElem;
+            
+            let lock = false;
+            const fromLastToElem = this.holderArray.slice(this.holderArray.findIndex(v => v.uuid === lastElement.uuid), props.idx)
+            const filteredArray = []
+            for (const element of fromLastToElem) {
+                if (element.group instanceof TripleBracketGroup) {
+                    lock = !lock;
+                    continue;
+                } else {
+                    if (!lock) {
+                        filteredArray.push(element)
+                    }
+                }
+            }
+            const newlineArray = filteredArray.filter(v => v.type === "Newline");
+            newlineArray.splice(0, 1) // listGroup의 마지막 element에서 다음 newline은 체크하지 않음
+            
+            const getIndent = (v: Range) => {
+                indentRegex.lastIndex = 0;
+                const indent = indentRegex.exec(this.wikiText.substring(v.start, v.end))
+                return indent === null ? 0 : (indent.groups?.indent as string).length;
+            }; 
+            const firstIndent = getIndent(firstElement.range); 
+            const lastIndent = getIndent(lastElement.range);
+            const elemIndent = getIndent(elem.range)
+
+            if (newlineArray.length === 0 && (elemIndent >= lastIndent || elemIndent >= firstIndent)) {
+                listGroup.push(elem)
+                return;
+            }
+
+            for (const newlineElem of newlineArray) {
+                const lineIndent = getIndent(newlineElem.eolRange);
+                if (lineIndent < elemIndent) {
+                    const group: Group = new ListGroup();
+                    listGroup.forEach(v => v.group = group);
+                    listGroup = [elem]
+                    return;
+                }
+            }
+            
+            if (elemIndent >= lastIndent || elemIndent >= firstIndent) {
+                listGroup.push(elem)
+            }
+        }
+        const processCite = (props: ProcessorProps) => {}
 
         const mappedProcessor: {[k in HolderType]?: (props: ProcessorProps)=>void} = {
             "Escape": processEscape,
@@ -304,6 +361,9 @@ export class NamuMark {
             "SquareBracketClose": processSquareBracketClose,
             "HeadingOpen": processHeadingOpen,
             "HeadingClose": processHeadingClose,
+            "OrderedList": processList,
+            "UnorderedList": processList,
+            "Cite": processCite,
         }
 
         for (let idx = 0; idx < this.holderArray.length; idx++) {
@@ -315,6 +375,17 @@ export class NamuMark {
                 continue;
             }
         }
+
+        const finalizeList = () => {
+            if (listGroup !== undefined) {
+                const group: Group = new ListGroup();
+                listGroup.forEach(v => v.group = group);
+                return;
+            }
+        }
+
+        finalizeList()
+
         console.log(this.holderArray)
     }
 
