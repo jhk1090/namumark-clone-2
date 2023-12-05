@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { TripleBracketContentGroup, TripleBracketGroup, CommentElem, ContentGroup, Elem, FoldingBracketElem, Group, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem, SquareBracketGroup, DoubleSquareBracketGroup, SingleSquareBracketGroup } from "./elem"
+import { TripleBracketContentGroup, TripleBracketGroup, CommentElem, ContentGroup, Elem, FoldingBracketElem, Group, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem, SquareBracketGroup, DoubleSquareBracketGroup, SingleSquareBracketGroup, HeadingGroup } from "./elem"
 const util = require("node:util");
 
 export class NamuMark {
@@ -107,128 +107,211 @@ export class NamuMark {
     doParsing() {
         const tripleBracketQueue: HolderElem[] = [];
         let squareBracketArray: { value: HolderElem[], max: number }[] = [];
-        for (let idx = 0; idx < this.holderArray.length; idx++) {
-            const elem = this.holderArray[idx]
-            const next = this.holderArray[idx + 1]
-            if (elem.type === "Escape") {
-                if (next.type === "Newline") {
-                    continue;
-                }
-                if (elem.range.isAdjacent(next.range)) {
-                    const group = new (next.type === "TripleBracketOpen" ? TripleBracketContentGroup : ContentGroup)();
-                    elem.group = group;
-                    next.group = group;
+        let headingOpenElement: HolderElem | undefined = undefined;
 
-                    // 다음 text 건너뛰기
-                    if (next.type === "TripleBracketClose" || next.type === "TripleBracketOpen") {
-                        continue;
-                    }
+        interface ProcessorProps {
+            idx: number;
+            setIdx: (v: number) => void
+        }
+        const processEscape = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            const next = this.holderArray[props.idx + 1]
 
-                    idx += 1;
-                }
-                continue;
+            if (next.type === "Newline") {
+                return;
             }
-            if (elem.type === "TripleBracketOpen") {
-                tripleBracketQueue.push(elem)
-                continue;
-            }
-            if (elem.type === "TripleBracketClose") {
-                const lastItem = tripleBracketQueue.pop();
-                if (lastItem === undefined) {
-                    elem.isObsolete = true;
-                    continue;
-                }
-                
-                const lastItemOrigin = this.holderArray.findIndex(v => v.uuid === lastItem.uuid)
-                
-                const group: Group = (lastItem.group ?? new TripleBracketGroup())
+            if (elem.range.isAdjacent(next.range)) {
+                const group = new (next.type === "TripleBracketOpen" ? TripleBracketContentGroup : ContentGroup)();
                 elem.group = group;
-                this.holderArray[lastItemOrigin].group = group;
-                continue;
-            }
-            if (elem.type === "SquareBracketOpen") {
-                const adjBrackets = [elem];
-                let lastRange: Range = elem.range;
-                let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
-                for (const subElem of this.holderArray.slice(idx + 1)) {
-                    if (subElem.type === "SquareBracketOpen" && lastRange.isAdjacent(subElem.range)) {
-                        bracketCount++;
-                        if (bracketCount > 2) {
-                            subElem.isObsolete = true;
-                        }
-                        adjBrackets.push(subElem);
-                        lastRange = subElem.range;
-                        continue;
-                    }
-                    break;
+                next.group = group;
+
+                // 다음 text 건너뛰기
+                if (next.type === "TripleBracketClose" || next.type === "TripleBracketOpen") {
+                    return;
                 }
 
-                squareBracketArray.push({ value: adjBrackets, max: 0 })
-                // 인접한 bracket은 pass해도 됨
-                idx += adjBrackets.length - 1;
-                continue;
+                props.setIdx(props.idx + 1);
             }
-            if (elem.type === "SquareBracketClose") {
-                const adjBrackets = [elem];
-                let lastRange: Range = elem.range;
-                let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
-                for (const subElem of this.holderArray.slice(idx + 1)) {
-                    if (subElem.type === "SquareBracketClose" && lastRange.isAdjacent(subElem.range)) {
-                        bracketCount++;
-                        if (bracketCount > 2) {
-                            subElem.isObsolete = true;
-                        }
-                        adjBrackets.push(subElem);
-                        lastRange = subElem.range;
-                        continue;
-                    }
-                    break;
-                }
+        }
+        const processTripleBracketOpen = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            tripleBracketQueue.push(elem)
+        }
+        const processTripleBracketClose = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            const lastItem = tripleBracketQueue.pop();
 
-                const firstItem = squareBracketArray[0];
-                if (firstItem === undefined) {
-                    adjBrackets.forEach(v => v.isObsolete = true);
-                    // 인접한 bracket은 pass해도 됨
-                    idx += adjBrackets.length - 1;
+            if (lastItem === undefined) {
+                elem.isObsolete = true;
+                return;
+            }
+            
+            const lastItemOrigin = this.holderArray.findIndex(v => v.uuid === lastItem.uuid)
+            
+            const group: Group = (lastItem.group ?? new TripleBracketGroup())
+            elem.group = group;
+            this.holderArray[lastItemOrigin].group = group;
+        }
+        const processSquareBracketOpen = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+
+            const adjBrackets = [elem];
+            let lastRange: Range = elem.range;
+            let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
+            for (const subElem of this.holderArray.slice(props.idx + 1)) {
+                if (subElem.type === "SquareBracketOpen" && lastRange.isAdjacent(subElem.range)) {
+                    bracketCount++;
+                    if (bracketCount > 2) {
+                        subElem.isObsolete = true;
+                    }
+                    adjBrackets.push(subElem);
+                    lastRange = subElem.range;
                     continue;
                 }
+                break;
+            }
 
-                for (const [index, bracket] of squareBracketArray.entries()) {
-                    if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
-                        if (adjBrackets.length > bracket.max) {
-                            bracket.max = adjBrackets.length;
-                            const group: Group = new (bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
-                            if (bracket.value.length >= 2 && bracket.max >= 2) {
-                                adjBrackets[0].group = group;
-                                adjBrackets[1].group = group;
-                                bracket.value[0].group = group;
-                                bracket.value[1].group = group;
-                            } else {
-                                adjBrackets[0].group = group;
-                                bracket.value[0].group = group;
-                            }
+            squareBracketArray.push({ value: adjBrackets, max: 0 })
+            // 인접한 bracket은 pass해도 됨
+            props.setIdx(props.idx + adjBrackets.length - 1);
+        }
+        const processSquareBracketClose = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            
+            const adjBrackets = [elem];
+
+            let lastRange: Range = elem.range;
+            let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
+            for (const subElem of this.holderArray.slice(props.idx + 1)) {
+                if (subElem.type === "SquareBracketClose" && lastRange.isAdjacent(subElem.range)) {
+                    bracketCount++;
+                    if (bracketCount > 2) {
+                        subElem.isObsolete = true;
+                    }
+                    adjBrackets.push(subElem);
+                    lastRange = subElem.range;
+                    continue;
+                }
+                break;
+            }
+
+            const firstItem = squareBracketArray[0];
+            if (firstItem === undefined) {
+                adjBrackets.forEach(v => v.isObsolete = true);
+                // 인접한 bracket은 pass해도 됨
+                props.setIdx(props.idx + adjBrackets.length - 1);
+                return;
+            }
+
+            for (const bracket of squareBracketArray) {
+                // 같은 개행 줄에 있는지 여부
+                if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
+                    if (adjBrackets.length > bracket.max) {
+                        bracket.max = adjBrackets.length;
+                        const group: Group = new (bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
+                        if (bracket.value.length >= 2 && bracket.max >= 2) {
+                            adjBrackets[0].group = group;
+                            adjBrackets[1].group = group;
+                            bracket.value[0].group = group;
+                            bracket.value[1].group = group;
                         } else {
-                            continue;
-                        }
-        
-                        if (bracket.value.length >= 2 && bracket.max >= 2 || bracket.value.length === 1 && bracket.max >= 1) {
-                            squareBracketArray = squareBracketArray.filter(v => v.value[0].range.start > adjBrackets[0].range.start)
-                            break;
+                            adjBrackets[0].group = group;
+                            bracket.value[0].group = group;
                         }
                     } else {
                         continue;
-                        // const firstPipe = this.holderArray.slice(this.holderArray.findIndex(v => v.uuid === correspondBracket[0].uuid), this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid)).find(v => v.type === "Pipe")
-                        // if (firstPipe === undefined) {
-                        //     adjBrackets.forEach(v => v.isObsolete = true);
-                        //     // 인접한 bracket은 pass해도 됨
-                        //     idx += adjBrackets.length - 1;
-                        //     continue;
-                        // }
                     }
+                } else {
+                    // 링크 문법이 아닌 매크로 이외의 문법일 경우
+                    if (!(bracket.value.length >= 2 && adjBrackets.length >= 2)) {
+                        adjBrackets.forEach(v => v.isObsolete = true);
+                        break;
+                    }
+
+                    const originIndex = this.holderArray.findIndex(v => v.uuid === bracket.value[0].uuid)
+                    const elementIndex = this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid)
+                    const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex(v => v.type === "Pipe") + originIndex;
+                    if (firstPipeIndex - originIndex === -1) {
+                        adjBrackets.forEach(v => v.isObsolete = true);
+                        break;
+                    }
+                    
+                    const fromPipeToElemArray = this.holderArray.slice(firstPipeIndex, elementIndex)
+                    let lock = false;
+                    const filteredArray = []
+                    for (const element of fromPipeToElemArray) {
+                        if (element.group instanceof TripleBracketGroup) {
+                            lock = !lock;
+                            continue;
+                        } else {
+                            if (!lock) {
+                                filteredArray.push(element)
+                            }
+                        }
+                    }
+
+                    // 개행문자가 들어가있는 경우
+                    if (filteredArray.filter(v => v.type === "Newline").length !== 0) {
+                        adjBrackets.forEach(v => v.isObsolete = true);
+                        break;
+                    }
+
+                    const group: Group = new DoubleSquareBracketGroup()
+                    adjBrackets[0].group = group;
+                    adjBrackets[1].group = group;
+                    bracket.value[0].group = group;
+                    bracket.value[1].group = group;
                 }
 
-                // 인접한 bracket은 pass해도 됨
-                idx += adjBrackets.length - 1;
+                if (bracket.value.length >= 2 && bracket.max >= 2 || bracket.value.length === 1 && bracket.max >= 1) {
+                    squareBracketArray = squareBracketArray.filter(v => v.value[0].range.start > adjBrackets[0].range.start)
+                    break;
+                }
+            }
+
+            // 인접한 bracket은 pass해도 됨
+            props.setIdx(props.idx + adjBrackets.length - 1);
+        }
+        const processHeadingOpen = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            headingOpenElement = elem;
+        }
+        const processHeadingClose = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx]
+            if (headingOpenElement !== undefined && headingOpenElement.eolRange === elem.eolRange) {
+                const openRegex = /(?<level>={1,6})(?<isHidden>#?) /g
+                const closeRegex = / (?<isHidden>#?)(?<level>={1,6})/g
+                const openGroup = (openRegex.exec(this.wikiText.substring(headingOpenElement.range.start, headingOpenElement.range.end)) as RegExpExecArray).groups
+                const closeGroup = (closeRegex.exec(this.wikiText.substring(elem.range.start, elem.range.end)) as RegExpExecArray).groups
+
+                // 같은 종류의 heading인지 확인
+                if (!((openGroup?.level ?? "1") === (closeGroup?.level ?? "2") && (openGroup?.isHidden ?? "1") === (closeGroup?.isHidden ?? "2"))) {
+                    return
+                }
+
+                const group: Group = new HeadingGroup()
+                elem.group = group;
+                headingOpenElement.group = group;
+                return
+            }
+        }
+
+        const mappedProcessor: {[k in HolderType]?: (props: ProcessorProps)=>void} = {
+            "Escape": processEscape,
+            "TripleBracketOpen": processTripleBracketOpen,
+            "TripleBracketClose": processTripleBracketClose,
+            "SquareBracketOpen": processSquareBracketOpen,
+            "SquareBracketClose": processSquareBracketClose,
+            "HeadingOpen": processHeadingOpen,
+            "HeadingClose": processHeadingClose,
+        }
+
+        for (let idx = 0; idx < this.holderArray.length; idx++) {
+            const elem = this.holderArray[idx]
+            const props: ProcessorProps = { idx, setIdx: (v: number) => idx = v }
+            const currentProcessor = mappedProcessor[elem.type]
+            if (currentProcessor !== undefined) {
+                currentProcessor(props)
                 continue;
             }
         }
