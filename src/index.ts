@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { CommentElem, Elem, FoldingBracketElem, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem } from "./elem"
+import { TripleBracketContentGroup, TripleBracketGroup, CommentElem, ContentGroup, Elem, FoldingBracketElem, Group, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem, SquareBracketGroup, DoubleSquareBracketGroup, SingleSquareBracketGroup } from "./elem"
 const util = require("node:util");
 
 export class NamuMark {
@@ -36,7 +36,7 @@ export class NamuMark {
         }
     }
 
-    evaluateHolder(arr: [RegExp, HolderType] | [RegExp, HolderType, number |undefined] | [RegExp, HolderType, number | undefined, number | undefined]) {
+    evaluateHolder(arr: [RegExp, HolderType, number?, number?]) {
         let [regex, type, offsetStart, offsetEnd] = arr;
         offsetStart = offsetStart ?? 0
         offsetEnd = offsetEnd ?? 0
@@ -82,7 +82,6 @@ export class NamuMark {
         const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1]
         const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1]
         const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1]
-        const footnoteOpen: offsetNone = [/\[\*/g, "FootnoteOpen"]
         const tableArgumentOpen: offsetNone = [/\</g, "TableArgumentOpen"]
         const tableArgumentClose: offsetNone = [/\</g, "TableArgumentClose"]
         const mathTagOpen: offsetNone = [/\<math\>/g, "MathTagOpen"]
@@ -93,8 +92,10 @@ export class NamuMark {
         const carot: offsetNone = [/\^/g, "Carot"]
         const comma: offsetNone = [/\,/g, "Comma"]
         const hyphen: offsetNone = [/\-/g, "Hyphen"]
+        const escape: offsetNone = [/\\/g, "Escape"]
+        const newline: offsetNone = [/[\n]/g, "Newline"]
 
-        const evaluators = [pipe, comment, squareBracketOpen, squareBracketClose, macroArgumentOpen, macroArgumentClose, headingOpen, headingClose, tripleBracketOpen, tripleBracketClose, unorderedList, orderedList, cite, footnoteOpen, tableArgumentOpen, tableArgumentClose, mathTagOpen, mathTagClose, quote, underbar, tilde, carot, comma, hyphen]
+        const evaluators = [pipe, comment, squareBracketOpen, squareBracketClose, macroArgumentOpen, macroArgumentClose, headingOpen, headingClose, tripleBracketOpen, tripleBracketClose, unorderedList, orderedList, cite, tableArgumentOpen, tableArgumentClose, mathTagOpen, mathTagClose, quote, underbar, tilde, carot, comma, hyphen, escape, newline]
         
         for (const evaluator of evaluators) {
             this.evaluateHolder(evaluator)
@@ -103,366 +104,115 @@ export class NamuMark {
         this.holderArray.sort((a, b) => a.range.start - b.range.start)
     }
 
-    parseHolderElem() {
-        type HolderIndexType = {holder: HolderElem, index: number};
-        type StackedType = {[k in HolderType]: (HolderIndexType[] | undefined)}
-        const stacked: StackedType = {} as StackedType
-        const substringRange = (range: Range) => {
-            return this.wikiText.substring(range.start, range.end)
+    doParsing() {
+        const tripleBracketQueue: HolderElem[] = [];
+        const squareBracketArray: HolderElem[][] = [];
+        const squareBracketFlag = {
+            index: 0,
+            max: 0
         }
-        const wikiTemp: Elem[] = [];
+        for (let idx = 0; idx < this.holderArray.length; idx++) {
+            const elem = this.holderArray[idx]
+            const next = this.holderArray[idx + 1]
+            if (elem.type === "Escape") {
+                if (next.type === "Newline") {
+                    continue;
+                }
+                if (elem.range.isAdjacent(next.range)) {
+                    const group = new (next.type === "TripleBracketOpen" ? TripleBracketContentGroup : ContentGroup)();
+                    elem.group = group;
+                    next.group = group;
 
-        const handleStacked = () => {    
-            const pushElem = (holder: HolderElem, index: number) => {
-                if (stacked[holder.type] === undefined) {
-                    stacked[holder.type] = [];
-                }
-                
-                let currentStacked = stacked[holder.type] ?? [];
-                currentStacked.push({holder, index})
-            }
-    
-            for (let idx = 0; idx < this.holderArray.length; idx++) {
-                pushElem(this.holderArray[idx], idx);
-            }
-        }
-        const matchStacked = () => {
-            const commentMatch = () => {
-                if (stacked.Comment === undefined) {
-                    return;
-                }
-
-                for (const elem of stacked.Comment) {
-                    wikiTemp.push(new CommentElem({ range: elem.holder.range }))
-                }
-            }
-            const headingMatch = () => {
-                if (stacked.HeadingOpen === undefined || stacked.HeadingClose === undefined) {
-                    return;
-                }
-
-                for (const elem of stacked.HeadingOpen) {
-                    const openElem = elem.holder;
-                    // 같은 라인에 있는지 체크
-                    const openElemLine = this.eolHolderArray.find(v => v.range.isSame(openElem.eolRange)) 
-                    if (openElemLine === undefined || openElemLine.holders === null) {
+                    // 다음 text 건너뛰기
+                    if (next.type === "TripleBracketClose" || next.type === "TripleBracketOpen") {
                         continue;
                     }
-                    const closeElem = openElemLine.holders.find(v => v.type === "HeadingClose")
-                    if (closeElem === undefined) {
-                        continue;
-                    }
-    
-                    // 같은 레벨인지 체크
-                    const openElemString = substringRange(openElem.range)
-                    const closeElemString = substringRange(closeElem.range)
-                    const startRegex = /^(?<level>={1,6})(?<hide>#)? $/g;
-                    const endRegex = /^ (?<hide>#)?(?<level>={1,6})$/g;
-                    const startGroup = startRegex.exec(openElemString)?.groups
-                    const endGroup = endRegex.exec(closeElemString)?.groups
-                    const isSameKind = startGroup?.level === endGroup?.level && startGroup?.hide === endGroup?.hide
-    
-                    if (!isSameKind) {
-                        continue;
-                    }
-                    // push
-                    const level = startGroup?.level.length ?? 0
-                    const isHidden = startGroup?.hide ? true : false
-    
-                    this.headingLevelAt[level - 1] += 1;
-                    this.headingLevelAt.fill(0, level);
-    
-                    wikiTemp.push(
-                        new HeadingElem({
-                            range: new Range(openElem.range.start, closeElem.range.end),
-                            headingLevel: level,
-                            isHeadingHidden: isHidden,
-                            headingLevelAt: [...this.headingLevelAt],
-                        })
-                    );
-                }
-            }
 
-            const tripleBracketMatch = () => {
-                if (stacked.TripleBracketOpen === undefined || stacked.TripleBracketClose === undefined) {
-                    return;
+                    idx += 1;
+                }
+                continue;
+            }
+            if (elem.type === "TripleBracketOpen") {
+                tripleBracketQueue.push(elem)
+                continue;
+            }
+            if (elem.type === "TripleBracketClose") {
+                const lastItem = tripleBracketQueue.pop();
+                if (lastItem === undefined) {
+                    elem.isObsolete = true;
+                    continue;
                 }
                 
-                let pairs: [[HolderIndexType, HolderIndexType]] | undefined; // [open, close]
-                let tripleBracketTemp: Elem[] = [];
-
-                const doPairing = () => {
-                    if (stacked.TripleBracketOpen === undefined || stacked.TripleBracketClose === undefined) {
-                        return;
-                    }
-
-                    const concattedArray = [...stacked.TripleBracketOpen, ...stacked.TripleBracketClose].sort((a, b) => a.index - b.index);
-                    let openStack: HolderIndexType[] = [];
-                    let closeStack: HolderIndexType[] = [];
-
-                    const fillPair = () => {
-                        const reversedOpenStack = openStack.toReversed();
-                        let i = 0;
-                        for (; i < closeStack.length; i++) {
-                            if (reversedOpenStack[i] === undefined) {
-                                closeStack = [];
-                                break;
-                            }
-                            if (pairs === undefined) {
-                                pairs = [[reversedOpenStack[i], closeStack[i]]];
-                            } else {
-                                pairs.push([reversedOpenStack[i], closeStack[i]]);
-                            }
-                        }
-                        // clean
-                        while (i !== 0) {
-                            openStack.pop();
-                            closeStack.splice(0, 1);
-                            i--;
-                        }
-                    };
-
-                    for (const concattedElem of concattedArray) {
-                        if (concattedElem.holder.type === "TripleBracketOpen") {
-                            if (closeStack.length !== 0) {
-                                fillPair();
-                            }
-                            openStack.push(concattedElem);
-                        }
-                        if (concattedElem.holder.type === "TripleBracketClose") {
-                            closeStack.push(concattedElem);
-                        }
-                    }
-
-                    fillPair();
-                };
-                const decideElemType = () => {
-                    if (pairs === undefined) {
-                        return;
-                    }
-
-                    for (const pair of pairs) {
-                        const [openElem, closeElem] = pair;
-
-                        // texteffect, wiki, folding, syntax, raw, html
-                        const syntaxRegex =
-                            /^{{{#!syntax (?<lang>basic|cpp|csharp|css|erlang|go|html|java(?:script)?|json|kotlin|lisp|lua|markdown|objectivec|perl|php|powershell|python|ruby|rust|sh|sql|swift|typescript|xml)/g;
-                        const textSizeRegex = /^{{{(?<size>(?:\+|-)(?:[1-5]))/g;
-                        const cssColor =
-                            "black|gray|grey|silver|white|red|maroon|yellow|olive|lime|green|aqua|cyan|teal|blue|navy|magenta|fuchsia|purple|dimgray|dimgrey|darkgray|darkgrey|lightgray|lightgrey|gainsboro|whitesmoke|brown|darkred|firebrick|indianred|lightcoral|rosybrown|snow|mistyrose|salmon|tomato|darksalmon|coral|orangered|lightsalmon|sienna|seashell|chocolate|saddlebrown|sandybrown|peachpuff|peru|linen|bisque|darkorange|burlywood|anaatiquewhite|tan|navajowhite|blanchedalmond|papayawhip|moccasin|orange|wheat|oldlace|floralwhite|darkgoldenrod|goldenrod|cornsilk|gold|khaki|lemonchiffon|palegoldenrod|darkkhaki|beige|ivory|lightgoldenrodyellow|lightyellow|olivedrab|yellowgreen|darkolivegreen|greenyellow|chartreuse|lawngreen|darkgreen|darkseagreen|forestgreen|honeydew|lightgreen|limegreen|palegreen|seagreen|mediumseagreen|springgreen|mintcream|mediumspringgreen|mediumaquamarine|aquamarine|turquoise|lightseagreen|mediumturquoise|azure|darkcyan|darkslategray|darkslategrey|lightcyan|paleturquoise|darkturquoise|cadetblue|powderblue|lightblue|deepskyblue|skyblue|lightskyblue|steelblue|aliceblue|dodgerblue|lightslategray|lightslategrey|slategray|slategrey|lightsteelblue|comflowerblue|royalblue|darkblue|ghostwhite|lavender|mediumblue|midnightblue|slateblue|darkslateblue|mediumslateblue|mediumpurple|rebeccapurple|blueviolet|indigo|darkorchid|darkviolet|mediumorchid|darkmagenta|plum|thistle|violet|orchid|mediumvioletred|deeppink|hotpink|lavenderblush|palevioletred|crimson|pink|lightpink";
-                        const hexCode = "(?:[0-9a-fA-F]{3}){1,2}";
-                        const textColorRegex = new RegExp(
-                            `^(?<primary>#(${cssColor}|${hexCode}))(?:\,(?<secondary>#(${cssColor}|${hexCode})))?`,
-                            "g"
-                        );
-                        const htmlRegex = /^{{{#!html/g;
-                        const foldingRegex = /^{{{#!folding(?<summary>.+)?/g;
-                        const wikiRegex = /^{{{#!wiki(?:(.+)?style="(?<style>[^"]+)?")?/g;
-                        // otherwise, just raw
-
-                        const targetedString = substringRange(new Range(openElem.holder.range.start, openElem.holder.eolRange.end));
-                        const resultRange = new Range(openElem.holder.range.start, closeElem.holder.range.end);
-
-                        const syntaxExecResult = syntaxRegex.exec(targetedString);
-                        const textSizeExecResult = textSizeRegex.exec(targetedString);
-                        const textColorExecResult = textColorRegex.exec(targetedString);
-                        const htmlExecResult = htmlRegex.exec(targetedString);
-                        const foldingExecResult = foldingRegex.exec(targetedString);
-                        const wikiExecResult = wikiRegex.exec(targetedString);
-                        const isMultiline = !openElem.holder.eolRange.isSame(closeElem.holder.eolRange);
-                        const defaultProvider = { range: resultRange, isMultiline };
-
-                        if (syntaxExecResult !== null) {
-                            tripleBracketTemp.push(
-                                new SyntaxBracketElem({ ...defaultProvider, language: syntaxExecResult.groups?.lang as SyntaxLanguageType })
-                            );
-                            continue;
-                        }
-                        if (textSizeExecResult !== null) {
-                            tripleBracketTemp.push(new TextSizeBracketElem({ ...defaultProvider, size: textSizeExecResult.groups?.size as TextSizeType }));
-                            continue;
-                        }
-
-                        if (textColorExecResult !== null) {
-                            tripleBracketTemp.push(
-                                new TextColorBracketElem({
-                                    ...defaultProvider,
-                                    primary: textColorExecResult.groups?.primary as string,
-                                    secondary: textColorExecResult.groups?.secondary,
-                                })
-                            );
-                            continue;
-                        }
-
-                        if (htmlExecResult !== null) {
-                            tripleBracketTemp.push(new HtmlBracketElem({ ...defaultProvider }));
-                            continue;
-                        }
-
-                        if (foldingExecResult !== null && isMultiline) {
-                            tripleBracketTemp.push(new FoldingBracketElem({ ...defaultProvider, summary: foldingExecResult.groups?.summary }));
-                            continue;
-                        }
-
-                        if (wikiExecResult !== null && isMultiline) {
-                            tripleBracketTemp.push(new WikiBracketElem({ ...defaultProvider, style: wikiExecResult.groups?.style }));
-                            continue;
-                        }
-
-                        tripleBracketTemp.push(new RawBracketElem({ ...defaultProvider }));
-                    }
-                };
-                /* const checkCollision = () => {
-                    const excludeIndices: number[] = [];
-                    for (const [i, outerElem] of tripleBracketTemp.entries()) {
-                        if (outerElem instanceof SyntaxBracketElem || outerElem instanceof HtmlBracketElem || outerElem instanceof RawBracketElem) {
-                            for (const [j, innerElem] of tripleBracketTemp.entries()) {
-                                if (innerElem.range.isSame(outerElem.range)) continue;
-                                if (excludeIndices.includes(j)) continue;
-                                if (innerElem.range.isContainedIn(outerElem.range)) {
-                                    excludeIndices.push(j)
-                                }
-                            }
-                        }
-                    }
-                    tripleBracketTemp = tripleBracketTemp.filter((_, index) => !excludeIndices.includes(index))
-                } */
-
-                doPairing()
-                decideElemType()
-                // checkCollision()
-                wikiTemp.push(...tripleBracketTemp)
-            }
-
-            const parenthesisMatch = () => {
-                if (stacked.ParenthesisOpen === undefined || stacked.ParenthesisClose === undefined) {
-                    return;
-                }
-
-                let pairs: [[HolderIndexType, HolderIndexType]] | undefined;
-                let parenthesisTemp: Elem[] = [];
-
-                const doPairing = () => {
-                    if (stacked.ParenthesisOpen === undefined || stacked.ParenthesisClose === undefined) {
-                        return;
-                    }
-
-                    const concattedArray = [...stacked.ParenthesisOpen, ...stacked.ParenthesisClose].sort((a, b) => a.index - b.index);
-                    let openStack: HolderIndexType[] = [];
-                    let closeStack: HolderIndexType[] = [];
-
-                    const fillPair = () => {
-                        const reversedOpenStack = openStack.toReversed();
-                        let i = 0;
-                        for (; i < closeStack.length; i++) {
-                            if (reversedOpenStack[i] === undefined) {
-                                closeStack = [];
-                                break;
-                            }
-                            if (pairs === undefined) {
-                                pairs = [[reversedOpenStack[i], closeStack[i]]];
-                            } else {
-                                pairs.push([reversedOpenStack[i], closeStack[i]])
-                            }
-                        }
-
-                        while (i !== 0) {
-                            openStack.pop();
-                            closeStack.splice(0, 1);
-                            i--;
-                        }
-                    }
-
-                    for (const concattedElem of concattedArray) {
-                        if (concattedElem.holder.type === "ParenthesisOpen") {
-                            if (closeStack.length !== 0) {
-                                fillPair();
-                            }
-                            openStack.push(concattedElem);
-                        }
-                        if (concattedElem.holder.type === "ParenthesisClose") {
-                            closeStack.push(concattedElem);
-                        }
-                    }
-
-                    fillPair();
-                }
-                const decideElemType = () => {
-                    if (pairs === undefined) {
-                        return;
-                    }
-
-                    for (const pair of pairs) {
-                        const [openElem, closeElem] = pair;
-                        const resultRange = new Range(openElem.holder.range.start, closeElem.holder.range.end);
-                        const isMultiline = !openElem.holder.eolRange.isSame(closeElem.holder.eolRange);
-                        const defaultProvider = { range: resultRange, isMultiline };
-                        parenthesisTemp.push(new ParenthesisElem({ ...defaultProvider }))
-                    }
-                }
-                doPairing();
-                decideElemType();
-
-                wikiTemp.push(...parenthesisTemp)
-            }
-
-            const squareBracketMatch = () => {
-                if (stacked.SquareBracketOpen === undefined || stacked.SquareBracketClose === undefined) {
-                    return;
-                }
-
-                const adjSquareBracketOpen: HolderIndexType[][] = [];
-                const adjSquareBracketClose: HolderIndexType[][] = [];
-                let pairs: [[HolderIndexType, HolderIndexType]] | undefined;
-
-                const fillAdjacent = () => {
-                    if (stacked.SquareBracketOpen === undefined || stacked.SquareBracketClose === undefined) {
-                        return;
-                    }
-
-                    for (const openElem of stacked.SquareBracketOpen) {
-                        const lastGroup = adjSquareBracketOpen.at(-1);
-                        if (lastGroup === undefined) {
-                            adjSquareBracketOpen.push([openElem])
-                        } else {
-                            if ((lastGroup.at(-1) as HolderIndexType).holder.range.isAdjacent(openElem.holder.range)) {
-                                lastGroup.push(openElem)
-                            } else {
-                                adjSquareBracketOpen.push([openElem])
-                            }
-                        }
-                    }
-
-                    for (const closeElem of stacked.SquareBracketClose) {
-                        const lastGroup = adjSquareBracketClose.at(-1);
-                        if (lastGroup === undefined) {
-                            adjSquareBracketClose.push([closeElem])
-                        } else {
-                            if ((lastGroup.at(-1) as HolderIndexType).holder.range.isAdjacent(closeElem.holder.range)) {
-                                lastGroup.push(closeElem)
-                            } else {
-                                adjSquareBracketClose.push([closeElem])
-                            }
-                        }
-                    }
-                }
+                const lastItemOrigin = this.holderArray.findIndex(v => v.uuid === lastItem.uuid)
                 
-                fillAdjacent();
-                const property = {showHidden: false, depth: null, colors: true};
-                console.log(util.inspect(adjSquareBracketOpen))
-                console.log(util.inspect(adjSquareBracketClose))
+                const group: Group = (lastItem.group ?? new TripleBracketGroup())
+                elem.group = group;
+                this.holderArray[lastItemOrigin].group = group;
+                continue;
             }
+            if (elem.type === "SquareBracketOpen") {
+                const adjBrackets = [elem];
+                let lastRange: Range = elem.range;
+                let bracketCount = 0; // 3 이상 부터는 모두 무쓸모
+                for (const subElem of this.holderArray.slice(idx + 1)) {
+                    if (subElem.type === "SquareBracketOpen" && lastRange.isAdjacent(subElem.range)) {
+                        if (bracketCount > 2) {
+                            subElem.isObsolete = true;
+                        }
+                        adjBrackets.push(subElem);
+                        lastRange = subElem.range;
+                        bracketCount++;
+                        continue;
+                    }
+                    break;
+                }
 
-            commentMatch();
-            headingMatch();
-            tripleBracketMatch();
-            parenthesisMatch();
-            squareBracketMatch();
+                squareBracketArray.push(adjBrackets)
+                // 인접한 bracket은 pass해도 됨
+                idx += adjBrackets.length - 1;
+                continue;
+            }
+            if (elem.type === "SquareBracketClose") {
+                const adjBrackets = [elem];
+                let lastRange: Range = elem.range;
+                for (const subElem of this.holderArray.slice(idx + 1)) {
+                    if (subElem.type === "SquareBracketClose" && lastRange.isAdjacent(subElem.range)) {
+                        adjBrackets.push(subElem);
+                        lastRange = subElem.range;
+                        continue;
+                    }
+                    break;
+                }
+
+                const firstItem = squareBracketArray[0];
+                if (firstItem === undefined) {
+                    adjBrackets.forEach(v => v.isObsolete = true);
+                    // 인접한 bracket은 pass해도 됨
+                    idx += adjBrackets.length - 1;
+                    continue;
+                }
+
+                const correspondBracket = squareBracketArray[squareBracketFlag.index]
+                if (adjBrackets.length > squareBracketFlag.max) {
+                    squareBracketFlag.max = adjBrackets.length;
+                    const group: Group = new (squareBracketFlag.max > 1 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
+                    adjBrackets.forEach(v => v.group = group);
+                    correspondBracket.forEach(v => v.group = group);
+                } else {
+                    adjBrackets.forEach(v => v.isObsolete = true);
+                }
+
+                if (correspondBracket.length >= 2 && squareBracketFlag.max >= 2 || correspondBracket.length === 1 && squareBracketFlag.max >= 1) {
+                    squareBracketFlag.index++;
+                    squareBracketFlag.max = 0;
+                }
+
+                // 인접한 bracket은 pass해도 됨
+                idx += adjBrackets.length - 1;
+                continue;
+            }
         }
-
-        handleStacked()
-        matchStacked()
-        // console.log(util.inspect(wikiTemp, {showHidden: false, depth: null, colors: true}))
+        console.log(this.holderArray)
     }
 
     parse() {
@@ -470,7 +220,7 @@ export class NamuMark {
         if (this.isRedirect === false) {
             this.fillEolHolder()
             this.collectHolderElem()
-            this.parseHolderElem()
+            this.doParsing()
         }
 
         return `<!DOCTYPE html>

@@ -116,13 +116,31 @@ export class ParenthesisElem extends UnableChild {
     }
 }
 
-export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "UnorderedList" | "OrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | ""
+export class Group {
+    uuid: string = uuidv4();
+}
+
+export class ContentGroup extends Group {}
+
+export class TripleBracketGroup extends Group {}
+
+export class TripleBracketContentGroup extends Group {}
+
+export class SquareBracketGroup extends Group {}
+
+export class SingleSquareBracketGroup extends Group {}
+
+export class DoubleSquareBracketGroup extends Group {}
+
+export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "UnorderedList" | "OrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
 
 export class HolderElem {
     range: Range = new Range(0, 1);
     eolRange: Range = new Range(0, 1);
+    group?: Group;
     type: HolderType = "";
     uuid: string = uuidv4();
+    isObsolete: boolean = false;
     constructor(range: Range, eolRange: Range, type: HolderType) {
         this.range = range;
         this.eolRange = eolRange;
