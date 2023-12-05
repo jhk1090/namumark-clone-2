@@ -106,11 +106,7 @@ export class NamuMark {
 
     doParsing() {
         const tripleBracketQueue: HolderElem[] = [];
-        let squareBracketArray: HolderElem[][] = [];
-        const squareBracketFlag = {
-            index: 0,
-            max: 0
-        }
+        let squareBracketArray: { value: HolderElem[], max: number }[] = [];
         for (let idx = 0; idx < this.holderArray.length; idx++) {
             const elem = this.holderArray[idx]
             const next = this.holderArray[idx + 1]
@@ -167,7 +163,7 @@ export class NamuMark {
                     break;
                 }
 
-                squareBracketArray.push(adjBrackets)
+                squareBracketArray.push({ value: adjBrackets, max: 0 })
                 // 인접한 bracket은 pass해도 됨
                 idx += adjBrackets.length - 1;
                 continue;
@@ -197,41 +193,38 @@ export class NamuMark {
                     continue;
                 }
 
-                const correspondBracket = squareBracketArray[squareBracketFlag.index]
-
-                if (correspondBracket[0].eolRange === adjBrackets[0].eolRange) {
-                    if (adjBrackets.length > squareBracketFlag.max) {
-                        squareBracketFlag.max = adjBrackets.length;
-                        const group: Group = new (squareBracketFlag.max > 1 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
-                        if (squareBracketFlag.max === 1) {
-                            adjBrackets[0].group = group;
-                            correspondBracket[0].group = group;
+                for (const [index, bracket] of squareBracketArray.entries()) {
+                    if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
+                        if (adjBrackets.length > bracket.max) {
+                            bracket.max = adjBrackets.length;
+                            const group: Group = new (bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
+                            if (bracket.value.length >= 2 && bracket.max >= 2) {
+                                adjBrackets[0].group = group;
+                                adjBrackets[1].group = group;
+                                bracket.value[0].group = group;
+                                bracket.value[1].group = group;
+                            } else {
+                                adjBrackets[0].group = group;
+                                bracket.value[0].group = group;
+                            }
                         } else {
-                            adjBrackets[0].group = group;
-                            adjBrackets[1].group = group;
-                            correspondBracket[0].group = group;
-                            correspondBracket[1].group = group;
+                            continue;
+                        }
+        
+                        if (bracket.value.length >= 2 && bracket.max >= 2 || bracket.value.length === 1 && bracket.max >= 1) {
+                            squareBracketArray = squareBracketArray.filter(v => v.value[0].range.start > adjBrackets[0].range.start)
+                            break;
                         }
                     } else {
-                        adjBrackets.forEach(v => v.isObsolete = true);
+                        continue;
+                        // const firstPipe = this.holderArray.slice(this.holderArray.findIndex(v => v.uuid === correspondBracket[0].uuid), this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid)).find(v => v.type === "Pipe")
+                        // if (firstPipe === undefined) {
+                        //     adjBrackets.forEach(v => v.isObsolete = true);
+                        //     // 인접한 bracket은 pass해도 됨
+                        //     idx += adjBrackets.length - 1;
+                        //     continue;
+                        // }
                     }
-    
-                    if (correspondBracket.length >= 2 && squareBracketFlag.max >= 2 || correspondBracket.length === 1 && squareBracketFlag.max >= 1) {
-                        squareBracketArray = squareBracketArray.filter(v => v[0].range.start > adjBrackets[0].range.start)
-                        squareBracketFlag.index = 0;
-                        squareBracketFlag.max = 0;
-                    }
-                } else {
-                    adjBrackets.forEach(v => v.isObsolete = true);
-                    idx += adjBrackets.length - 1;
-                    continue;
-                    // const firstPipe = this.holderArray.slice(this.holderArray.findIndex(v => v.uuid === correspondBracket[0].uuid), this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid)).find(v => v.type === "Pipe")
-                    // if (firstPipe === undefined) {
-                    //     adjBrackets.forEach(v => v.isObsolete = true);
-                    //     // 인접한 bracket은 pass해도 됨
-                    //     idx += adjBrackets.length - 1;
-                    //     continue;
-                    // }
                 }
 
                 // 인접한 bracket은 pass해도 됨
