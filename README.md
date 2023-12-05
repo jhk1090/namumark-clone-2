@@ -23,3 +23,12 @@
 [[ (할당)
 
 ]] (max = 2)
+
+```
+[[][date]
+```
+
+[[ ( char = [, max = 0, index = 0 )
+] ( length > max -> max = 1 ) ( queue[1].group = singleGroup )
+[ ( char = [, max = 0, index = 1 )
+] ( length == max (x) )

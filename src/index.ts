@@ -106,7 +106,7 @@ export class NamuMark {
 
     doParsing() {
         const tripleBracketQueue: HolderElem[] = [];
-        const squareBracketArray: HolderElem[][] = [];
+        let squareBracketArray: HolderElem[][] = [];
         const squareBracketFlag = {
             index: 0,
             max: 0
@@ -153,15 +153,15 @@ export class NamuMark {
             if (elem.type === "SquareBracketOpen") {
                 const adjBrackets = [elem];
                 let lastRange: Range = elem.range;
-                let bracketCount = 0; // 3 이상 부터는 모두 무쓸모
+                let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
                 for (const subElem of this.holderArray.slice(idx + 1)) {
                     if (subElem.type === "SquareBracketOpen" && lastRange.isAdjacent(subElem.range)) {
+                        bracketCount++;
                         if (bracketCount > 2) {
                             subElem.isObsolete = true;
                         }
                         adjBrackets.push(subElem);
                         lastRange = subElem.range;
-                        bracketCount++;
                         continue;
                     }
                     break;
@@ -175,8 +175,13 @@ export class NamuMark {
             if (elem.type === "SquareBracketClose") {
                 const adjBrackets = [elem];
                 let lastRange: Range = elem.range;
+                let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
                 for (const subElem of this.holderArray.slice(idx + 1)) {
                     if (subElem.type === "SquareBracketClose" && lastRange.isAdjacent(subElem.range)) {
+                        bracketCount++;
+                        if (bracketCount > 2) {
+                            subElem.isObsolete = true;
+                        }
                         adjBrackets.push(subElem);
                         lastRange = subElem.range;
                         continue;
@@ -193,18 +198,40 @@ export class NamuMark {
                 }
 
                 const correspondBracket = squareBracketArray[squareBracketFlag.index]
-                if (adjBrackets.length > squareBracketFlag.max) {
-                    squareBracketFlag.max = adjBrackets.length;
-                    const group: Group = new (squareBracketFlag.max > 1 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
-                    adjBrackets.forEach(v => v.group = group);
-                    correspondBracket.forEach(v => v.group = group);
+
+                if (correspondBracket[0].eolRange === adjBrackets[0].eolRange) {
+                    if (adjBrackets.length > squareBracketFlag.max) {
+                        squareBracketFlag.max = adjBrackets.length;
+                        const group: Group = new (squareBracketFlag.max > 1 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
+                        if (squareBracketFlag.max === 1) {
+                            adjBrackets[0].group = group;
+                            correspondBracket[0].group = group;
+                        } else {
+                            adjBrackets[0].group = group;
+                            adjBrackets[1].group = group;
+                            correspondBracket[0].group = group;
+                            correspondBracket[1].group = group;
+                        }
+                    } else {
+                        adjBrackets.forEach(v => v.isObsolete = true);
+                    }
+    
+                    if (correspondBracket.length >= 2 && squareBracketFlag.max >= 2 || correspondBracket.length === 1 && squareBracketFlag.max >= 1) {
+                        squareBracketArray = squareBracketArray.filter(v => v[0].range.start > adjBrackets[0].range.start)
+                        squareBracketFlag.index = 0;
+                        squareBracketFlag.max = 0;
+                    }
                 } else {
                     adjBrackets.forEach(v => v.isObsolete = true);
-                }
-
-                if (correspondBracket.length >= 2 && squareBracketFlag.max >= 2 || correspondBracket.length === 1 && squareBracketFlag.max >= 1) {
-                    squareBracketFlag.index++;
-                    squareBracketFlag.max = 0;
+                    idx += adjBrackets.length - 1;
+                    continue;
+                    // const firstPipe = this.holderArray.slice(this.holderArray.findIndex(v => v.uuid === correspondBracket[0].uuid), this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid)).find(v => v.type === "Pipe")
+                    // if (firstPipe === undefined) {
+                    //     adjBrackets.forEach(v => v.isObsolete = true);
+                    //     // 인접한 bracket은 pass해도 됨
+                    //     idx += adjBrackets.length - 1;
+                    //     continue;
+                    // }
                 }
 
                 // 인접한 bracket은 pass해도 됨
