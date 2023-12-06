@@ -104,6 +104,7 @@ export class NamuMark {
         const headingClose: offsetBoth = [/ (#?)={1,6}\n/g, "HeadingClose", undefined, -1];
         const tripleBracketOpen: offsetNone = [/\{\{\{/g, "TripleBracketOpen"];
         const tripleBracketClose: offsetNone = [/\}\}\}/g, "TripleBracketClose"];
+        const indent: offsetOnlyStart = [/\n( ){1,}/g, "Indent", 1]
         const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1];
         const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1];
         const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1];
@@ -131,6 +132,7 @@ export class NamuMark {
             headingClose,
             tripleBracketOpen,
             tripleBracketClose,
+            indent,
             unorderedList,
             orderedList,
             cite,
@@ -368,7 +370,7 @@ export class NamuMark {
                 this.holderArray.findIndex((v) => v.uuid === lastElement.uuid),
                 props.idx
             );
-            const filteredArray = [];
+            const filteredArray: HolderElem[] = [];
             for (const element of fromLastToElem) {
                 if (element.group instanceof TripleBracketGroup) {
                     lock = !lock;
@@ -379,26 +381,34 @@ export class NamuMark {
                     }
                 }
             }
-            const newlineArray = filteredArray.filter((v) => v.type === "Newline");
-            newlineArray.splice(0, 1); // listGroup의 마지막 element에서 다음 newline은 체크하지 않음
+            
+            const indentArray: HolderElem[] = []
+            filteredArray.map((v, i) => {
+                const next = filteredArray[i + 1];
+                if (v.type === "Newline") {
+                    indentArray.push(next.type === "Indent" ? next : v);
+                }
+            });
 
-            const getIndent = (v: Range) => {
-                indentRegex.lastIndex = 0;
-                const indent = indentRegex.exec(this.wikiText.substring(v.start, v.end));
-                return indent === null ? 0 : (indent.groups?.indent as string).length;
-            };
+            const getIndent = (range: Range) => {
+                const found = this.holderArray.find(v => v.type === "Indent" && v.range.isContainedIn(range))
+                if (found === undefined) {
+                    return 0;
+                }
+                return found.range.end - found.range.start;
+            }
+
             const firstIndent = getIndent(firstElement.range);
-            const lastIndent = getIndent(lastElement.range);
-            const elemIndent = getIndent(elem.range);
+            const elemIndent = getIndent(elem.eolRange);
 
-            if (newlineArray.length === 0 && (elemIndent >= lastIndent || elemIndent >= firstIndent)) {
+            if (indentArray.length === 1 && elemIndent >= firstIndent) {
                 listGroup.push(elem);
                 return;
             }
 
-            for (const newlineElem of newlineArray) {
-                const lineIndent = getIndent(newlineElem.eolRange);
-                if (lineIndent < elemIndent) {
+            for (const indentElem of indentArray) {
+                const lineIndent = indentElem.type === "Newline" ? 0 : getIndent(indentElem.eolRange);
+                if (lineIndent < firstIndent) {
                     const group: Group = new ListGroup();
                     listGroup.forEach((v) => (v.group = group));
                     listGroup = [elem];
@@ -406,7 +416,7 @@ export class NamuMark {
                 }
             }
 
-            if (elemIndent >= lastIndent || elemIndent >= firstIndent) {
+            if (elemIndent >= firstIndent) {
                 listGroup.push(elem);
             }
         };
