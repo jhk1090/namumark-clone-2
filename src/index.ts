@@ -1,5 +1,30 @@
 import { Range, seekEOL } from "./utils";
-import { TripleBracketContentGroup, TripleBracketGroup, CommentElem, ContentGroup, Elem, FoldingBracketElem, Group, HeadingElem, HolderElem, HolderType, HtmlBracketElem, ParenthesisElem, RawBracketElem, SyntaxBracketElem, SyntaxLanguageType, TextColorBracketElem, TextSizeBracketElem, TextSizeType, WikiBracketElem, SquareBracketGroup, DoubleSquareBracketGroup, SingleSquareBracketGroup, HeadingGroup, ListGroup } from "./elem"
+import {
+    TripleBracketContentGroup,
+    TripleBracketGroup,
+    CommentElem,
+    ContentGroup,
+    Elem,
+    FoldingBracketElem,
+    Group,
+    HeadingElem,
+    HolderElem,
+    HolderType,
+    HtmlBracketElem,
+    ParenthesisElem,
+    RawBracketElem,
+    SyntaxBracketElem,
+    SyntaxLanguageType,
+    TextColorBracketElem,
+    TextSizeBracketElem,
+    TextSizeType,
+    WikiBracketElem,
+    SquareBracketGroup,
+    DoubleSquareBracketGroup,
+    SingleSquareBracketGroup,
+    HeadingGroup,
+    ListGroup,
+} from "./elem";
 const util = require("node:util");
 
 export class NamuMark {
@@ -16,21 +41,21 @@ export class NamuMark {
     }
 
     processRedirect() {
-        const redirectRegex = /^\n#redirect ([^\n]+)/g
-        const match = redirectRegex.exec(this.wikiText)
+        const redirectRegex = /^\n#redirect ([^\n]+)/g;
+        const match = redirectRegex.exec(this.wikiText);
         if (match !== null) {
             this.isRedirect = true;
         }
     }
 
     fillEolHolder() {
-        let offset = 0
+        let offset = 0;
         while (true) {
-            const result = seekEOL(this.wikiText, offset)
+            const result = seekEOL(this.wikiText, offset);
             if (result === -1) {
                 break;
             } else {
-                this.eolHolderArray.push({range: new Range(offset, result + 1), holders: null})
+                this.eolHolderArray.push({ range: new Range(offset, result + 1), holders: null });
                 offset = result + 1;
             }
         }
@@ -38,37 +63,37 @@ export class NamuMark {
 
     evaluateHolder(arr: [RegExp, HolderType, number?, number?]) {
         let [regex, type, offsetStart, offsetEnd] = arr;
-        offsetStart = offsetStart ?? 0
-        offsetEnd = offsetEnd ?? 0
+        offsetStart = offsetStart ?? 0;
+        offsetEnd = offsetEnd ?? 0;
 
         let match;
 
         while ((match = regex.exec(this.wikiText)) !== null) {
             let target;
-            let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd)
+            let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd);
             for (const eol of this.eolHolderArray) {
                 if (targetRange.isContainedIn(eol.range)) {
-                    target = new HolderElem(targetRange, eol.range, type)
+                    target = new HolderElem(targetRange, eol.range, type);
                     if (eol.holders === null) {
-                        eol.holders = [target]
+                        eol.holders = [target];
                     } else {
-                        eol.holders.push(target)
+                        eol.holders.push(target);
                     }
                     break;
                 }
             }
-            this.holderArray.push(target as HolderElem)
+            this.holderArray.push(target as HolderElem);
         }
     }
 
     collectHolderElem() {
         type offset = number | undefined;
-        type offsetNone = [RegExp, HolderType]
-        type offsetOnlyStart = [RegExp, HolderType, offset]
-        type offsetBoth = [RegExp, HolderType, offset, offset]
+        type offsetNone = [RegExp, HolderType];
+        type offsetOnlyStart = [RegExp, HolderType, offset];
+        type offsetBoth = [RegExp, HolderType, offset, offset];
         // linkpipe, tablecell
-        const pipe: offsetNone = [/\|/g, "Pipe"]
-        const comment: offsetOnlyStart = [/\n##[^\n]+/g, "Comment", 1]
+        const pipe: offsetNone = [/\|/g, "Pipe"];
+        const comment: offsetOnlyStart = [/\n##[^\n]+/g, "Comment", 1];
         // linkOpen, macroOpen
         const squareBracketOpen: offsetNone = [/\[/g, "SquareBracketOpen"];
         // footnoteclose, linkclose, macroclose
@@ -78,45 +103,71 @@ export class NamuMark {
         const headingOpen: offsetOnlyStart = [/\n={1,6}(#?) /g, "HeadingOpen", 1];
         const headingClose: offsetBoth = [/ (#?)={1,6}\n/g, "HeadingClose", undefined, -1];
         const tripleBracketOpen: offsetNone = [/\{\{\{/g, "TripleBracketOpen"];
-        const tripleBracketClose: offsetNone = [/\}\}\}/g, "TripleBracketClose"]
-        const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1]
-        const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1]
-        const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1]
-        const tableArgumentOpen: offsetNone = [/\</g, "TableArgumentOpen"]
-        const tableArgumentClose: offsetNone = [/\</g, "TableArgumentClose"]
-        const mathTagOpen: offsetNone = [/\<math\>/g, "MathTagOpen"]
-        const mathTagClose: offsetNone = [/\<\/math\>/g, "MathTagClose"]
-        const quote: offsetNone = [/\'/g, "Quote"]
-        const underbar: offsetNone = [/\_/g, "Underbar"]
-        const tilde: offsetNone = [/\~/g, "Tilde"]
-        const carot: offsetNone = [/\^/g, "Carot"]
-        const comma: offsetNone = [/\,/g, "Comma"]
-        const hyphen: offsetNone = [/\-/g, "Hyphen"]
-        const escape: offsetNone = [/\\/g, "Escape"]
-        const newline: offsetNone = [/[\n]/g, "Newline"]
+        const tripleBracketClose: offsetNone = [/\}\}\}/g, "TripleBracketClose"];
+        const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1];
+        const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1];
+        const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1];
+        const tableArgumentOpen: offsetNone = [/\</g, "TableArgumentOpen"];
+        const tableArgumentClose: offsetNone = [/\</g, "TableArgumentClose"];
+        const mathTagOpen: offsetNone = [/\<math\>/g, "MathTagOpen"];
+        const mathTagClose: offsetNone = [/\<\/math\>/g, "MathTagClose"];
+        const quote: offsetNone = [/\'/g, "Quote"];
+        const underbar: offsetNone = [/\_/g, "Underbar"];
+        const tilde: offsetNone = [/\~/g, "Tilde"];
+        const carot: offsetNone = [/\^/g, "Carot"];
+        const comma: offsetNone = [/\,/g, "Comma"];
+        const hyphen: offsetNone = [/\-/g, "Hyphen"];
+        const escape: offsetNone = [/\\/g, "Escape"];
+        const newline: offsetNone = [/[\n]/g, "Newline"];
 
-        const evaluators = [pipe, comment, squareBracketOpen, squareBracketClose, macroArgumentOpen, macroArgumentClose, headingOpen, headingClose, tripleBracketOpen, tripleBracketClose, unorderedList, orderedList, cite, tableArgumentOpen, tableArgumentClose, mathTagOpen, mathTagClose, quote, underbar, tilde, carot, comma, hyphen, escape, newline]
-        
+        const evaluators = [
+            pipe,
+            comment,
+            squareBracketOpen,
+            squareBracketClose,
+            macroArgumentOpen,
+            macroArgumentClose,
+            headingOpen,
+            headingClose,
+            tripleBracketOpen,
+            tripleBracketClose,
+            unorderedList,
+            orderedList,
+            cite,
+            tableArgumentOpen,
+            tableArgumentClose,
+            mathTagOpen,
+            mathTagClose,
+            quote,
+            underbar,
+            tilde,
+            carot,
+            comma,
+            hyphen,
+            escape,
+            newline,
+        ];
+
         for (const evaluator of evaluators) {
-            this.evaluateHolder(evaluator)
+            this.evaluateHolder(evaluator);
         }
 
-        this.holderArray.sort((a, b) => a.range.start - b.range.start)
+        this.holderArray.sort((a, b) => a.range.start - b.range.start);
     }
 
     doParsing() {
         const tripleBracketQueue: HolderElem[] = [];
-        let squareBracketArray: { value: HolderElem[], max: number }[] = [];
+        let squareBracketArray: { value: HolderElem[]; max: number }[] = [];
         let headingOpenElement: HolderElem | undefined = undefined;
         let listGroup: HolderElem[] | undefined = undefined;
 
         interface ProcessorProps {
             idx: number;
-            setIdx: (v: number) => void
+            setIdx: (v: number) => void;
         }
         const processEscape = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
-            const next = this.holderArray[props.idx + 1]
+            const elem = this.holderArray[props.idx];
+            const next = this.holderArray[props.idx + 1];
 
             if (next.type === "Newline") {
                 return;
@@ -133,28 +184,28 @@ export class NamuMark {
 
                 props.setIdx(props.idx + 1);
             }
-        }
+        };
         const processTripleBracketOpen = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
-            tripleBracketQueue.push(elem)
-        }
+            const elem = this.holderArray[props.idx];
+            tripleBracketQueue.push(elem);
+        };
         const processTripleBracketClose = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
+            const elem = this.holderArray[props.idx];
             const lastItem = tripleBracketQueue.pop();
 
             if (lastItem === undefined) {
                 elem.isObsolete = true;
                 return;
             }
-            
-            const lastItemOrigin = this.holderArray.findIndex(v => v.uuid === lastItem.uuid)
-            
-            const group: Group = (lastItem.group ?? new TripleBracketGroup())
+
+            const lastItemOrigin = this.holderArray.findIndex((v) => v.uuid === lastItem.uuid);
+
+            const group: Group = lastItem.group ?? new TripleBracketGroup();
             elem.group = group;
             this.holderArray[lastItemOrigin].group = group;
-        }
+        };
         const processSquareBracketOpen = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
+            const elem = this.holderArray[props.idx];
 
             const adjBrackets = [elem];
             let lastRange: Range = elem.range;
@@ -172,13 +223,13 @@ export class NamuMark {
                 break;
             }
 
-            squareBracketArray.push({ value: adjBrackets, max: 0 })
+            squareBracketArray.push({ value: adjBrackets, max: 0 });
             // 인접한 bracket은 pass해도 됨
             props.setIdx(props.idx + adjBrackets.length - 1);
-        }
+        };
         const processSquareBracketClose = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
-            
+            const elem = this.holderArray[props.idx];
+
             const adjBrackets = [elem];
 
             let lastRange: Range = elem.range;
@@ -198,7 +249,7 @@ export class NamuMark {
 
             const firstItem = squareBracketArray[0];
             if (firstItem === undefined) {
-                adjBrackets.forEach(v => v.isObsolete = true);
+                adjBrackets.forEach((v) => (v.isObsolete = true));
                 // 인접한 bracket은 pass해도 됨
                 props.setIdx(props.idx + adjBrackets.length - 1);
                 return;
@@ -209,7 +260,9 @@ export class NamuMark {
                 if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
                     if (adjBrackets.length > bracket.max) {
                         bracket.max = adjBrackets.length;
-                        const group: Group = new (bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)()
+                        const group: Group = new (
+                            bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup
+                        )();
                         if (bracket.value.length >= 2 && bracket.max >= 2) {
                             adjBrackets[0].group = group;
                             adjBrackets[1].group = group;
@@ -225,115 +278,121 @@ export class NamuMark {
                 } else {
                     // 링크 문법이 아닌 매크로 이외의 문법일 경우
                     if (!(bracket.value.length >= 2 && adjBrackets.length >= 2)) {
-                        adjBrackets.forEach(v => v.isObsolete = true);
+                        adjBrackets.forEach((v) => (v.isObsolete = true));
                         break;
                     }
 
-                    const originIndex = this.holderArray.findIndex(v => v.uuid === bracket.value[0].uuid)
-                    const elementIndex = this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid)
-                    const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex(v => v.type === "Pipe") + originIndex;
+                    const originIndex = this.holderArray.findIndex((v) => v.uuid === bracket.value[0].uuid);
+                    const elementIndex = this.holderArray.findIndex((v) => v.uuid === adjBrackets[0].uuid);
+                    const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex((v) => v.type === "Pipe") + originIndex;
                     if (firstPipeIndex - originIndex === -1) {
-                        adjBrackets.forEach(v => v.isObsolete = true);
+                        adjBrackets.forEach((v) => (v.isObsolete = true));
                         break;
                     }
-                    
-                    const fromPipeToElemArray = this.holderArray.slice(firstPipeIndex, elementIndex)
+
+                    const fromPipeToElemArray = this.holderArray.slice(firstPipeIndex, elementIndex);
                     let lock = false;
-                    const filteredArray = []
+                    const filteredArray = [];
                     for (const element of fromPipeToElemArray) {
                         if (element.group instanceof TripleBracketGroup) {
                             lock = !lock;
                             continue;
                         } else {
                             if (!lock) {
-                                filteredArray.push(element)
+                                filteredArray.push(element);
                             }
                         }
                     }
 
                     // 개행문자가 들어가있는 경우
-                    if (filteredArray.filter(v => v.type === "Newline").length !== 0) {
-                        adjBrackets.forEach(v => v.isObsolete = true);
+                    if (filteredArray.filter((v) => v.type === "Newline").length !== 0) {
+                        adjBrackets.forEach((v) => (v.isObsolete = true));
                         break;
                     }
 
-                    const group: Group = new DoubleSquareBracketGroup()
+                    const group: Group = new DoubleSquareBracketGroup();
                     adjBrackets[0].group = group;
                     adjBrackets[1].group = group;
                     bracket.value[0].group = group;
                     bracket.value[1].group = group;
                 }
 
-                if (bracket.value.length >= 2 && bracket.max >= 2 || bracket.value.length === 1 && bracket.max >= 1) {
-                    squareBracketArray = squareBracketArray.filter(v => v.value[0].range.start > adjBrackets[0].range.start)
+                if ((bracket.value.length >= 2 && bracket.max >= 2) || (bracket.value.length === 1 && bracket.max >= 1)) {
+                    squareBracketArray = squareBracketArray.filter((v) => v.value[0].range.start > adjBrackets[0].range.start);
                     break;
                 }
             }
 
             // 인접한 bracket은 pass해도 됨
             props.setIdx(props.idx + adjBrackets.length - 1);
-        }
+        };
         const processHeadingOpen = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
+            const elem = this.holderArray[props.idx];
             headingOpenElement = elem;
-        }
+        };
         const processHeadingClose = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
+            const elem = this.holderArray[props.idx];
             if (headingOpenElement !== undefined && headingOpenElement.eolRange === elem.eolRange) {
-                const openRegex = /(?<level>={1,6})(?<isHidden>#?) /g
-                const closeRegex = / (?<isHidden>#?)(?<level>={1,6})/g
-                const openGroup = (openRegex.exec(this.wikiText.substring(headingOpenElement.range.start, headingOpenElement.range.end)) as RegExpExecArray).groups
-                const closeGroup = (closeRegex.exec(this.wikiText.substring(elem.range.start, elem.range.end)) as RegExpExecArray).groups
+                const openRegex = /(?<level>={1,6})(?<isHidden>#?) /g;
+                const closeRegex = / (?<isHidden>#?)(?<level>={1,6})/g;
+                const openGroup = (
+                    openRegex.exec(this.wikiText.substring(headingOpenElement.range.start, headingOpenElement.range.end)) as RegExpExecArray
+                ).groups;
+                const closeGroup = (closeRegex.exec(this.wikiText.substring(elem.range.start, elem.range.end)) as RegExpExecArray).groups;
 
                 // 같은 종류의 heading인지 확인
                 if (!((openGroup?.level ?? "1") === (closeGroup?.level ?? "2") && (openGroup?.isHidden ?? "1") === (closeGroup?.isHidden ?? "2"))) {
-                    return
+                    return;
                 }
 
-                const group: Group = new HeadingGroup()
+                const group: Group = new HeadingGroup();
                 elem.group = group;
                 headingOpenElement.group = group;
-                return
+                return;
             }
-        }
+        };
         const processList = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx]
-            const indentRegex = /^(?<indent>( ){1,})/g
+            const elem = this.holderArray[props.idx];
+            const indentRegex = /^(?<indent>( ){1,})/g;
             if (listGroup === undefined) {
                 listGroup = [elem];
                 return;
             }
-            
+
             const firstElement = listGroup.at(0) as HolderElem;
             const lastElement = listGroup.at(-1) as HolderElem;
-            
+
+            // 3중괄호 문법 감지
             let lock = false;
-            const fromLastToElem = this.holderArray.slice(this.holderArray.findIndex(v => v.uuid === lastElement.uuid), props.idx)
-            const filteredArray = []
+            const fromLastToElem = this.holderArray.slice(
+                this.holderArray.findIndex((v) => v.uuid === lastElement.uuid),
+                props.idx
+            );
+            const filteredArray = [];
             for (const element of fromLastToElem) {
                 if (element.group instanceof TripleBracketGroup) {
                     lock = !lock;
                     continue;
                 } else {
                     if (!lock) {
-                        filteredArray.push(element)
+                        filteredArray.push(element);
                     }
                 }
             }
-            const newlineArray = filteredArray.filter(v => v.type === "Newline");
-            newlineArray.splice(0, 1) // listGroup의 마지막 element에서 다음 newline은 체크하지 않음
-            
+            const newlineArray = filteredArray.filter((v) => v.type === "Newline");
+            newlineArray.splice(0, 1); // listGroup의 마지막 element에서 다음 newline은 체크하지 않음
+
             const getIndent = (v: Range) => {
                 indentRegex.lastIndex = 0;
-                const indent = indentRegex.exec(this.wikiText.substring(v.start, v.end))
+                const indent = indentRegex.exec(this.wikiText.substring(v.start, v.end));
                 return indent === null ? 0 : (indent.groups?.indent as string).length;
-            }; 
-            const firstIndent = getIndent(firstElement.range); 
+            };
+            const firstIndent = getIndent(firstElement.range);
             const lastIndent = getIndent(lastElement.range);
-            const elemIndent = getIndent(elem.range)
+            const elemIndent = getIndent(elem.range);
 
             if (newlineArray.length === 0 && (elemIndent >= lastIndent || elemIndent >= firstIndent)) {
-                listGroup.push(elem)
+                listGroup.push(elem);
                 return;
             }
 
@@ -341,37 +400,37 @@ export class NamuMark {
                 const lineIndent = getIndent(newlineElem.eolRange);
                 if (lineIndent < elemIndent) {
                     const group: Group = new ListGroup();
-                    listGroup.forEach(v => v.group = group);
-                    listGroup = [elem]
+                    listGroup.forEach((v) => (v.group = group));
+                    listGroup = [elem];
                     return;
                 }
             }
-            
-            if (elemIndent >= lastIndent || elemIndent >= firstIndent) {
-                listGroup.push(elem)
-            }
-        }
-        const processCite = (props: ProcessorProps) => {}
 
-        const mappedProcessor: {[k in HolderType]?: (props: ProcessorProps)=>void} = {
-            "Escape": processEscape,
-            "TripleBracketOpen": processTripleBracketOpen,
-            "TripleBracketClose": processTripleBracketClose,
-            "SquareBracketOpen": processSquareBracketOpen,
-            "SquareBracketClose": processSquareBracketClose,
-            "HeadingOpen": processHeadingOpen,
-            "HeadingClose": processHeadingClose,
-            "OrderedList": processList,
-            "UnorderedList": processList,
-            "Cite": processCite,
-        }
+            if (elemIndent >= lastIndent || elemIndent >= firstIndent) {
+                listGroup.push(elem);
+            }
+        };
+        const processCite = (props: ProcessorProps) => {};
+
+        const mappedProcessor: { [k in HolderType]?: (props: ProcessorProps) => void } = {
+            Escape: processEscape,
+            TripleBracketOpen: processTripleBracketOpen,
+            TripleBracketClose: processTripleBracketClose,
+            SquareBracketOpen: processSquareBracketOpen,
+            SquareBracketClose: processSquareBracketClose,
+            HeadingOpen: processHeadingOpen,
+            HeadingClose: processHeadingClose,
+            OrderedList: processList,
+            UnorderedList: processList,
+            Cite: processCite,
+        };
 
         for (let idx = 0; idx < this.holderArray.length; idx++) {
-            const elem = this.holderArray[idx]
-            const props: ProcessorProps = { idx, setIdx: (v: number) => idx = v }
-            const currentProcessor = mappedProcessor[elem.type]
+            const elem = this.holderArray[idx];
+            const props: ProcessorProps = { idx, setIdx: (v: number) => (idx = v) };
+            const currentProcessor = mappedProcessor[elem.type];
             if (currentProcessor !== undefined) {
-                currentProcessor(props)
+                currentProcessor(props);
                 continue;
             }
         }
@@ -379,22 +438,22 @@ export class NamuMark {
         const finalizeList = () => {
             if (listGroup !== undefined) {
                 const group: Group = new ListGroup();
-                listGroup.forEach(v => v.group = group);
+                listGroup.forEach((v) => (v.group = group));
                 return;
             }
-        }
+        };
 
-        finalizeList()
+        finalizeList();
 
-        console.log(this.holderArray)
+        console.log(this.holderArray);
     }
 
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
-            this.fillEolHolder()
-            this.collectHolderElem()
-            this.doParsing()
+            this.fillEolHolder();
+            this.collectHolderElem();
+            this.doParsing();
         }
 
         return `<!DOCTYPE html>
