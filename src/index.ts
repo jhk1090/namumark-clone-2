@@ -24,6 +24,7 @@ import {
     SingleSquareBracketGroup,
     HeadingGroup,
     ListGroup,
+    IndentGroup,
 } from "./elem";
 const util = require("node:util");
 
@@ -32,12 +33,20 @@ export class NamuMark {
     isRedirect: boolean = false;
     wikiArray: Elem[] = [];
     holderArray: HolderElem[] = [];
+    groupArray: Group[] = [];
     eolHolderArray: { range: Range; holders: HolderElem[] | null }[] = [];
     headingLevelAt: number[] = [0, 0, 0, 0, 0, 0];
 
     constructor(wikiText: string) {
         // \n는 regex 방지용
         this.wikiText = "\n" + wikiText + "\n";
+    }
+
+    pushGroup(props: {group: Group, elems: HolderElem[]}) {
+        for (const elem of props.elems) {
+            elem.group.push(props.group);
+        }
+        this.groupArray.push(props.group);
     }
 
     processRedirect() {
@@ -161,7 +170,6 @@ export class NamuMark {
         const tripleBracketQueue: HolderElem[] = [];
         let squareBracketArray: { value: HolderElem[]; max: number }[] = [];
         let headingOpenElement: HolderElem | undefined = undefined;
-        let listGroup: HolderElem[] | undefined = undefined;
 
         interface ProcessorProps {
             idx: number;
@@ -175,9 +183,7 @@ export class NamuMark {
                 return;
             }
             if (elem.range.isAdjacent(next.range)) {
-                const group = new (next.type === "TripleBracketOpen" ? TripleBracketContentGroup : ContentGroup)();
-                elem.group = group;
-                next.group = group;
+                this.pushGroup({ group: new (next.type === "TripleBracketOpen" ? TripleBracketContentGroup : ContentGroup)(), elems: [elem, next] });
 
                 // 다음 text 건너뛰기
                 if (next.type === "TripleBracketClose" || next.type === "TripleBracketOpen") {
@@ -200,11 +206,8 @@ export class NamuMark {
                 return;
             }
 
-            const lastItemOrigin = this.holderArray.findIndex((v) => v.uuid === lastItem.uuid);
-
-            const group: Group = lastItem.group ?? new TripleBracketGroup();
-            elem.group = group;
-            this.holderArray[lastItemOrigin].group = group;
+            const group: Group = lastItem.group.find(v => v instanceof TripleBracketContentGroup) ? new TripleBracketContentGroup() : new TripleBracketGroup();
+            this.pushGroup({ group, elems: [elem] })
         };
         const processSquareBracketOpen = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
@@ -248,7 +251,6 @@ export class NamuMark {
                 }
                 break;
             }
-
             const firstItem = squareBracketArray[0];
             if (firstItem === undefined) {
                 adjBrackets.forEach((v) => (v.isObsolete = true));
@@ -258,6 +260,38 @@ export class NamuMark {
             }
 
             for (const bracket of squareBracketArray) {
+                const parseParenthesis = (group: Group) => {
+                    let parenthesisPair: [HolderElem?, HolderElem?] = [undefined, undefined];
+                    const startOrigin = this.holderArray.findIndex(v => v.uuid === bracket.value[0].uuid);
+                    const endOrigin = this.holderArray.findIndex(v => v.uuid === adjBrackets[0].uuid);
+                    for (const subElem of this.holderArray.slice(startOrigin, endOrigin)) {
+                        if (subElem.type === "ParenthesisOpen" && parenthesisPair[0] === undefined) {
+                            parenthesisPair[0] = subElem;
+                            continue;
+                        }
+
+                        if (subElem.type === "ParenthesisClose" && parenthesisPair[0] !== undefined) {
+                            parenthesisPair[1] = subElem;
+                            continue;
+                        }
+                    }
+                    const validMacroRegex = /clearfix|date|datetime|목차|tableofcontents|각주|footnote|br|pagecount|anchor|age|dday|youtube|kakaotv|nicovideo|vimeo|navertv|pagecount|math|include/g
+                    const [pStart, pEnd] = parenthesisPair;
+                    if (!((pStart === undefined && pEnd === undefined) || (pStart !== undefined && pEnd !== undefined))) {
+                        return false;
+                    }
+                    if (pEnd !== undefined) {
+                        if (!(pEnd.range.isAdjacent(adjBrackets[0].range))) {
+                            return false;
+                        }
+                    }
+                    if (validMacroRegex.exec(this.wikiText.substring(bracket.value.at(-1)?.range.start as number, (pEnd === undefined ? adjBrackets[0].range.start : pStart?.range.start))) === null) {
+                        return false;
+                    }
+                    
+                    this.pushGroup({group, elems: [adjBrackets[0], bracket.value[0]]})
+                    return true
+                }
                 // 같은 개행 줄에 있는지 여부
                 if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
                     if (adjBrackets.length > bracket.max) {
@@ -266,57 +300,62 @@ export class NamuMark {
                             bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup
                         )();
                         if (bracket.value.length >= 2 && bracket.max >= 2) {
-                            adjBrackets[0].group = group;
-                            adjBrackets[1].group = group;
-                            bracket.value[0].group = group;
-                            bracket.value[1].group = group;
+                            // 링크 문법
+                            this.pushGroup({group, elems: [adjBrackets[0], adjBrackets[1], bracket.value[0], bracket.value[1]]})
                         } else {
-                            adjBrackets[0].group = group;
-                            bracket.value[0].group = group;
+                            // 매크로 문법
+                            const isSucceed = parseParenthesis(group);
+                            if (!isSucceed) {
+                                adjBrackets.forEach((v) => (v.isObsolete = true));
+                                break;
+                            }
                         }
                     } else {
                         continue;
                     }
                 } else {
-                    // 링크 문법이 아닌 매크로 이외의 문법일 경우
-                    if (!(bracket.value.length >= 2 && adjBrackets.length >= 2)) {
-                        adjBrackets.forEach((v) => (v.isObsolete = true));
-                        break;
-                    }
-
-                    const originIndex = this.holderArray.findIndex((v) => v.uuid === bracket.value[0].uuid);
-                    const elementIndex = this.holderArray.findIndex((v) => v.uuid === adjBrackets[0].uuid);
-                    const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex((v) => v.type === "Pipe") + originIndex;
-                    if (firstPipeIndex - originIndex === -1) {
-                        adjBrackets.forEach((v) => (v.isObsolete = true));
-                        break;
-                    }
-
-                    const fromPipeToElemArray = this.holderArray.slice(firstPipeIndex, elementIndex);
-                    let lock = false;
-                    const filteredArray = [];
-                    for (const element of fromPipeToElemArray) {
-                        if (element.group instanceof TripleBracketGroup) {
-                            lock = !lock;
-                            continue;
-                        } else {
-                            if (!lock) {
-                                filteredArray.push(element);
+                    if (bracket.value.length >= 2 && bracket.max >= 2) {
+                        // 링크
+                        const originIndex = this.holderArray.findIndex((v) => v.uuid === bracket.value[0].uuid);
+                        const elementIndex = this.holderArray.findIndex((v) => v.uuid === adjBrackets[0].uuid);
+                        const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex((v) => v.type === "Pipe") + originIndex;
+                        if (firstPipeIndex - originIndex === -1) {
+                            adjBrackets.forEach((v) => (v.isObsolete = true));
+                            break;
+                        }
+    
+                        const fromPipeToElemArray = this.holderArray.slice(firstPipeIndex, elementIndex);
+                        let lock = false;
+                        const filteredArray = [];
+                        for (const element of fromPipeToElemArray) {
+                            if (element.group instanceof TripleBracketGroup) {
+                                lock = !lock;
+                                continue;
+                            } else {
+                                if (!lock) {
+                                    filteredArray.push(element);
+                                }
                             }
+                        }
+    
+                        // 개행문자가 들어가있는 경우
+                        if (filteredArray.filter((v) => v.type === "Newline").length !== 0) {
+                            adjBrackets.forEach((v) => (v.isObsolete = true));
+                            break;
+                        }
+    
+                        const group: Group = new DoubleSquareBracketGroup();
+                        this.pushGroup({group, elems: [adjBrackets[0], adjBrackets[1], bracket.value[0], bracket.value[1]]})
+                    } else {
+                        // 매크로
+                        const group: Group = new SingleSquareBracketGroup();
+                        const isSucceed = parseParenthesis(group);
+                        if (!isSucceed) {
+                            adjBrackets.forEach((v) => (v.isObsolete = true));
+                            break;
                         }
                     }
 
-                    // 개행문자가 들어가있는 경우
-                    if (filteredArray.filter((v) => v.type === "Newline").length !== 0) {
-                        adjBrackets.forEach((v) => (v.isObsolete = true));
-                        break;
-                    }
-
-                    const group: Group = new DoubleSquareBracketGroup();
-                    adjBrackets[0].group = group;
-                    adjBrackets[1].group = group;
-                    bracket.value[0].group = group;
-                    bracket.value[1].group = group;
                 }
 
                 if ((bracket.value.length >= 2 && bracket.max >= 2) || (bracket.value.length === 1 && bracket.max >= 1)) {
@@ -347,92 +386,19 @@ export class NamuMark {
                     return;
                 }
 
-                const group: Group = new HeadingGroup();
-                elem.group = group;
-                headingOpenElement.group = group;
+                this.pushGroup({group: new HeadingGroup(), elems: [elem, headingOpenElement]})
                 return;
             }
         };
-        const processList = (props: ProcessorProps) => {
-            const elem = this.holderArray[props.idx];
-            const indentRegex = /^(?<indent>( ){1,})/g;
-            if (listGroup === undefined) {
-                listGroup = [elem];
-                return;
-            }
 
-            const firstElement = listGroup.at(0) as HolderElem;
-            const lastElement = listGroup.at(-1) as HolderElem;
-
-            // 3중괄호 문법 감지
-            let lock = false;
-            const fromLastToElem = this.holderArray.slice(
-                this.holderArray.findIndex((v) => v.uuid === lastElement.uuid),
-                props.idx
-            );
-            const filteredArray: HolderElem[] = [];
-            for (const element of fromLastToElem) {
-                if (element.group instanceof TripleBracketGroup) {
-                    lock = !lock;
-                    continue;
-                } else {
-                    if (!lock) {
-                        filteredArray.push(element);
-                    }
-                }
-            }
-            
-            const indentArray: HolderElem[] = []
-            filteredArray.map((v, i) => {
-                const next = filteredArray[i + 1];
-                if (v.type === "Newline") {
-                    indentArray.push(next.type === "Indent" ? next : v);
-                }
-            });
-
-            const getIndent = (range: Range) => {
-                const found = this.holderArray.find(v => v.type === "Indent" && v.range.isContainedIn(range))
-                if (found === undefined) {
-                    return 0;
-                }
-                return found.range.end - found.range.start;
-            }
-
-            const firstIndent = getIndent(firstElement.range);
-            const elemIndent = getIndent(elem.eolRange);
-
-            if (indentArray.length === 1 && elemIndent >= firstIndent) {
-                listGroup.push(elem);
-                return;
-            }
-
-            for (const indentElem of indentArray) {
-                const lineIndent = indentElem.type === "Newline" ? 0 : getIndent(indentElem.eolRange);
-                if (lineIndent < firstIndent) {
-                    const group: Group = new ListGroup();
-                    listGroup.forEach((v) => (v.group = group));
-                    listGroup = [elem];
-                    return;
-                }
-            }
-
-            if (elemIndent >= firstIndent) {
-                listGroup.push(elem);
-            }
-        };
-        const processCite = (props: ProcessorProps) => {};
-
-        const mappedProcessor: { [k in HolderType]?: (props: ProcessorProps) => void } = {
-            Escape: processEscape,
-            TripleBracketOpen: processTripleBracketOpen,
-            TripleBracketClose: processTripleBracketClose,
-            SquareBracketOpen: processSquareBracketOpen,
-            SquareBracketClose: processSquareBracketClose,
-            HeadingOpen: processHeadingOpen,
-            HeadingClose: processHeadingClose,
-            OrderedList: processList,
-            UnorderedList: processList,
-            Cite: processCite,
+        const mappedProcessor: { [k in HolderType]?: ((props: ProcessorProps) => void)[] } = {
+            Escape: [ processEscape ],
+            TripleBracketOpen: [ processTripleBracketOpen ],
+            TripleBracketClose: [ processTripleBracketClose ],
+            SquareBracketOpen: [ processSquareBracketOpen ],
+            SquareBracketClose: [ processSquareBracketClose ],
+            HeadingOpen: [ processHeadingOpen ],
+            HeadingClose: [ processHeadingClose ],
         };
 
         for (let idx = 0; idx < this.holderArray.length; idx++) {
@@ -440,22 +406,14 @@ export class NamuMark {
             const props: ProcessorProps = { idx, setIdx: (v: number) => (idx = v) };
             const currentProcessor = mappedProcessor[elem.type];
             if (currentProcessor !== undefined) {
-                currentProcessor(props);
+                for (const processor of currentProcessor) {
+                    processor(props)
+                }
                 continue;
             }
         }
 
-        const finalizeList = () => {
-            if (listGroup !== undefined) {
-                const group: Group = new ListGroup();
-                listGroup.forEach((v) => (v.group = group));
-                return;
-            }
-        };
-
-        finalizeList();
-
-        console.log(this.holderArray);
+        console.log(util.inspect(this.holderArray, false, null, true))
     }
 
     parse() {
@@ -465,17 +423,5 @@ export class NamuMark {
             this.collectHolderElem();
             this.doParsing();
         }
-
-        return `<!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Document</title>
-        <link rel="stylesheet" href="viewStyle.css">
-        </head>
-        <body><script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script></body>
-        </html>`;
     }
 }

@@ -134,6 +134,8 @@ export class DoubleSquareBracketGroup extends Group {}
 
 export class HeadingGroup extends Group {}
 
+export class IndentGroup extends Group {}
+
 export class ListGroup extends Group {}
 
 export class CiteGroup extends Group {}
@@ -143,7 +145,7 @@ export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "Parenth
 export class HolderElem {
     range: Range = new Range(0, 1);
     eolRange: Range = new Range(0, 1);
-    group?: Group;
+    group: Group[] = [];
     type: HolderType = "";
     uuid: string = uuidv4();
     isObsolete: boolean = false;
