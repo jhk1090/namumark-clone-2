@@ -121,6 +121,8 @@ export class Group {
     elems: HolderElem[] = [];
 }
 
+export class CommentGroup extends Group {}
+
 export class ContentGroup extends Group {}
 
 export class TripleBracketGroup extends Group {}
@@ -134,6 +136,8 @@ export class SingleSquareBracketGroup extends Group {}
 export class DoubleSquareBracketGroup extends Group {}
 
 export class HeadingGroup extends Group {}
+
+export class MathTagGroup extends Group {}
 
 export class IndentGroup extends Group {}
 
