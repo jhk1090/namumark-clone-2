@@ -118,6 +118,7 @@ export class ParenthesisElem extends UnableChild {
 
 export class Group {
     uuid: string = uuidv4();
+    elems: HolderElem[] = [];
 }
 
 export class ContentGroup extends Group {}
@@ -140,6 +141,8 @@ export class ListGroup extends Group {}
 
 export class CiteGroup extends Group {}
 
+export class FootnoteGroup extends Group {}
+
 export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "Indent" | "UnorderedList" | "OrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
 
 export class HolderElem {
@@ -148,7 +151,8 @@ export class HolderElem {
     group: Group[] = [];
     type: HolderType = "";
     uuid: string = uuidv4();
-    isObsolete: boolean = false;
+    fixed: boolean = false;
+    ignore: boolean = false;
     constructor(range: Range, eolRange: Range, type: HolderType) {
         this.range = range;
         this.eolRange = eolRange;

@@ -25,6 +25,7 @@ import {
     HeadingGroup,
     ListGroup,
     IndentGroup,
+    FootnoteGroup,
 } from "./elem";
 const util = require("node:util");
 
@@ -43,10 +44,31 @@ export class NamuMark {
     }
 
     pushGroup(props: {group: Group, elems: HolderElem[]}) {
+        props.group.elems.push(...props.elems)
+        props.group.elems.sort((a, b) => a.range.start - b.range.start)
         for (const elem of props.elems) {
             elem.group.push(props.group);
         }
         this.groupArray.push(props.group);
+    }
+
+    removeGroup(props: {group: Group}) {
+        const targetIndex = this.groupArray.findIndex(v => v.uuid === props.group.uuid)
+        for (const elem of this.groupArray[targetIndex].elems) {
+            elem.group = elem.group.filter(v => v.uuid !== props.group.uuid)
+        }
+        this.groupArray.splice(targetIndex, 1)
+    }
+
+    removeFromGroup(props: {group: Group, elems: HolderElem[]}) {
+        for (const elem of props.elems) {
+            const idx = props.group.elems.findIndex(v => v.uuid === elem.uuid);
+            if (idx !== -1) {
+                props.group.elems.splice(idx, 1);
+            }
+            elem.group = elem.group.filter(v => v.uuid !== props.group.uuid)
+        }
+        props.group.elems.sort((a, b) => a.range.start - b.range.start);
     }
 
     processRedirect() {
@@ -105,6 +127,7 @@ export class NamuMark {
         const comment: offsetOnlyStart = [/\n##[^\n]+/g, "Comment", 1];
         // linkOpen, macroOpen
         const squareBracketOpen: offsetNone = [/\[/g, "SquareBracketOpen"];
+        const footnoteOpen: offsetOnlyStart = [/\[\*/g, "FootnoteOpen", 1];
         // footnoteclose, linkclose, macroclose
         const squareBracketClose: offsetNone = [/\]/g, "SquareBracketClose"];
         const macroArgumentOpen: offsetNone = [/\(/g, "ParenthesisOpen"];
@@ -134,6 +157,7 @@ export class NamuMark {
             pipe,
             comment,
             squareBracketOpen,
+            footnoteOpen,
             squareBracketClose,
             macroArgumentOpen,
             macroArgumentClose,
@@ -170,6 +194,7 @@ export class NamuMark {
         const tripleBracketQueue: HolderElem[] = [];
         let squareBracketArray: { value: HolderElem[]; max: number }[] = [];
         let headingOpenElement: HolderElem | undefined = undefined;
+        const footnoteQueue: [HolderElem, HolderElem][] = [];
 
         interface ProcessorProps {
             idx: number;
@@ -202,12 +227,12 @@ export class NamuMark {
             const lastItem = tripleBracketQueue.pop();
 
             if (lastItem === undefined) {
-                elem.isObsolete = true;
+                // elem.ignore = true;
                 return;
             }
 
             const group: Group = lastItem.group.find(v => v instanceof TripleBracketContentGroup) ? new TripleBracketContentGroup() : new TripleBracketGroup();
-            this.pushGroup({ group, elems: [elem] })
+            this.pushGroup({ group, elems: [lastItem, elem] })
         };
         const processSquareBracketOpen = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
@@ -219,7 +244,7 @@ export class NamuMark {
                 if (subElem.type === "SquareBracketOpen" && lastRange.isAdjacent(subElem.range)) {
                     bracketCount++;
                     if (bracketCount > 2) {
-                        subElem.isObsolete = true;
+                        // subElem.ignore = true;
                     }
                     adjBrackets.push(subElem);
                     lastRange = subElem.range;
@@ -243,7 +268,7 @@ export class NamuMark {
                 if (subElem.type === "SquareBracketClose" && lastRange.isAdjacent(subElem.range)) {
                     bracketCount++;
                     if (bracketCount > 2) {
-                        subElem.isObsolete = true;
+                        // subElem.ignore = true;
                     }
                     adjBrackets.push(subElem);
                     lastRange = subElem.range;
@@ -253,7 +278,7 @@ export class NamuMark {
             }
             const firstItem = squareBracketArray[0];
             if (firstItem === undefined) {
-                adjBrackets.forEach((v) => (v.isObsolete = true));
+                // adjBrackets.forEach((v) => (v.ignore = true));
                 // 인접한 bracket은 pass해도 됨
                 props.setIdx(props.idx + adjBrackets.length - 1);
                 return;
@@ -275,7 +300,7 @@ export class NamuMark {
                             continue;
                         }
                     }
-                    const validMacroRegex = /clearfix|date|datetime|목차|tableofcontents|각주|footnote|br|pagecount|anchor|age|dday|youtube|kakaotv|nicovideo|vimeo|navertv|pagecount|math|include/g
+                    const validMacroRegex = /^(clearfix|date|datetime|목차|tableofcontents|각주|footnote|br|pagecount|anchor|age|dday|youtube|kakaotv|nicovideo|vimeo|navertv|pagecount|math|include)$/g
                     const [pStart, pEnd] = parenthesisPair;
                     if (!((pStart === undefined && pEnd === undefined) || (pStart !== undefined && pEnd !== undefined))) {
                         return false;
@@ -285,11 +310,12 @@ export class NamuMark {
                             return false;
                         }
                     }
-                    if (validMacroRegex.exec(this.wikiText.substring(bracket.value.at(-1)?.range.start as number, (pEnd === undefined ? adjBrackets[0].range.start : pStart?.range.start))) === null) {
+                    if (validMacroRegex.exec(this.wikiText.substring(bracket.value.at(-1)?.range.start as number + 1, (pEnd === undefined ? adjBrackets[0].range.start : pStart?.range.start))) === null) {
                         return false;
                     }
                     
-                    this.pushGroup({group, elems: [adjBrackets[0], bracket.value[0]]})
+                    const elems = pStart === undefined ? [adjBrackets[0], bracket.value[0]] : [adjBrackets[0], pStart as HolderElem, pEnd as HolderElem, bracket.value[0]];
+                    this.pushGroup({group, elems})
                     return true
                 }
                 // 같은 개행 줄에 있는지 여부
@@ -301,12 +327,16 @@ export class NamuMark {
                         )();
                         if (bracket.value.length >= 2 && bracket.max >= 2) {
                             // 링크 문법
-                            this.pushGroup({group, elems: [adjBrackets[0], adjBrackets[1], bracket.value[0], bracket.value[1]]})
+                            const originIndex = this.holderArray.findIndex((v) => v.uuid === bracket.value[0].uuid);
+                            const elementIndex = this.holderArray.findIndex((v) => v.uuid === adjBrackets[0].uuid);
+                            const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex((v) => v.type === "Pipe") + originIndex;
+                            const elems = firstPipeIndex - originIndex === -1 ? [adjBrackets[0], adjBrackets[1], bracket.value[0], bracket.value[1]] : [adjBrackets[0], adjBrackets[1], this.holderArray[firstPipeIndex], bracket.value[0], bracket.value[1]]
+                            this.pushGroup({group, elems})
                         } else {
                             // 매크로 문법
                             const isSucceed = parseParenthesis(group);
                             if (!isSucceed) {
-                                adjBrackets.forEach((v) => (v.isObsolete = true));
+                                // adjBrackets.forEach((v) => (v.ignore = true));
                                 break;
                             }
                         }
@@ -320,7 +350,7 @@ export class NamuMark {
                         const elementIndex = this.holderArray.findIndex((v) => v.uuid === adjBrackets[0].uuid);
                         const firstPipeIndex = this.holderArray.slice(originIndex, elementIndex).findIndex((v) => v.type === "Pipe") + originIndex;
                         if (firstPipeIndex - originIndex === -1) {
-                            adjBrackets.forEach((v) => (v.isObsolete = true));
+                            // adjBrackets.forEach((v) => (v.ignore = true));
                             break;
                         }
     
@@ -340,18 +370,18 @@ export class NamuMark {
     
                         // 개행문자가 들어가있는 경우
                         if (filteredArray.filter((v) => v.type === "Newline").length !== 0) {
-                            adjBrackets.forEach((v) => (v.isObsolete = true));
+                            // adjBrackets.forEach((v) => (v.ignore = true));
                             break;
                         }
     
                         const group: Group = new DoubleSquareBracketGroup();
-                        this.pushGroup({group, elems: [adjBrackets[0], adjBrackets[1], bracket.value[0], bracket.value[1]]})
+                        this.pushGroup({group, elems: [adjBrackets[0], adjBrackets[1], this.holderArray[firstPipeIndex], bracket.value[0], bracket.value[1]]})
                     } else {
                         // 매크로
                         const group: Group = new SingleSquareBracketGroup();
                         const isSucceed = parseParenthesis(group);
                         if (!isSucceed) {
-                            adjBrackets.forEach((v) => (v.isObsolete = true));
+                            // adjBrackets.forEach((v) => (v.ignore = true));
                             break;
                         }
                     }
@@ -390,8 +420,40 @@ export class NamuMark {
                 return;
             }
         };
+        const processFootnoteOpen = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+            const prev = this.holderArray[props.idx - 1];
+            
+            // 이미 사용중
+            if (prev.fixed) {
+                return;
+            }
 
-        const mappedProcessor: { [k in HolderType]?: ((props: ProcessorProps) => void)[] } = {
+            // 인접 여부
+            if (!(elem.range.isAdjacent(prev.range))) {
+                return;
+            }
+
+            footnoteQueue.push([prev, elem])
+        }
+        const processFootnoteClose = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+            const lastTuple = footnoteQueue.pop();
+
+            if (elem.fixed) {
+                return;
+            }
+
+            if (lastTuple === undefined) {
+                return;
+            }
+
+            this.pushGroup({ group: new FootnoteGroup(), elems: [...lastTuple, elem] })
+        }
+
+        type ProcessorType = { [k in HolderType]?: ((props: ProcessorProps) => void)[] };
+
+        const firstMappedProcessor: ProcessorType = {
             Escape: [ processEscape ],
             TripleBracketOpen: [ processTripleBracketOpen ],
             TripleBracketClose: [ processTripleBracketClose ],
@@ -400,20 +462,139 @@ export class NamuMark {
             HeadingOpen: [ processHeadingOpen ],
             HeadingClose: [ processHeadingClose ],
         };
-
-        for (let idx = 0; idx < this.holderArray.length; idx++) {
-            const elem = this.holderArray[idx];
-            const props: ProcessorProps = { idx, setIdx: (v: number) => (idx = v) };
-            const currentProcessor = mappedProcessor[elem.type];
-            if (currentProcessor !== undefined) {
-                for (const processor of currentProcessor) {
-                    processor(props)
+        const firstGrouping = () => {
+            for (let idx = 0; idx < this.holderArray.length; idx++) {
+                const elem = this.holderArray[idx];
+    
+                if (elem.fixed) {
+                    continue;
                 }
-                continue;
+    
+                if (elem.ignore) {
+                    elem.group.forEach(group => this.removeGroup({ group }))
+                    continue;
+                }
+    
+                const doubleSquare = elem.group.find(v => v instanceof DoubleSquareBracketGroup)
+                if (doubleSquare !== undefined) {
+                    const foundGroup = elem.group.find(v => v instanceof SingleSquareBracketGroup)
+                    if (foundGroup !== undefined) {
+                        this.removeGroup({ group: foundGroup })
+                    }
+                    if (doubleSquare.elems.length !== 4 && doubleSquare.elems.length !== 5) {
+                        this.removeGroup({ group: doubleSquare })
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex(v => v.uuid === doubleSquare.elems[1].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === doubleSquare.elems[doubleSquare.elems.length === 4 /* pipe 제외 시 */ ? 2 : 3].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    const pipeIndex = sliced.findIndex(v => v.type === "Pipe");
+                    (pipeIndex !== -1 ? sliced.slice(0, pipeIndex + 1) : sliced).forEach(v => v.ignore = true);
+                }
+                
+                const singleSquare = elem.group.find(v => v instanceof SingleSquareBracketGroup)
+                if (singleSquare !== undefined) {
+                    if (singleSquare.elems.length !== 2 && singleSquare.elems.length !== 4) {
+                        this.removeGroup({ group: singleSquare })
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex(v => v.uuid === singleSquare.elems[0].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === singleSquare.elems[singleSquare.elems.length - 1].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    sliced.forEach((v) => {
+                        if (v.type !== "ParenthesisOpen" && v.type !== "ParenthesisClose") 
+                            v.ignore = true
+                    });
+                }
+    
+                const triple = elem.group.find(v => v instanceof TripleBracketGroup)
+                if (triple !== undefined) {
+                    if (triple.elems.length !== 2) {
+                        this.removeGroup({ group: triple })
+                        continue;
+                    }
+                }
+    
+                const heading = elem.group.find(v => v instanceof HeadingGroup)
+                if (heading !== undefined) {
+                    if (heading.elems.length !== 2) {
+                        this.removeGroup({ group: heading })
+                        continue;
+                    }
+                }
+    
+                const tripleContent = elem.group.find(v => v instanceof TripleBracketContentGroup)
+                if (tripleContent !== undefined) {
+                    if (tripleContent.elems.length !== 3) {
+                        this.removeGroup({ group: tripleContent })
+                        continue;
+                    }
+                }
+    
+                const content = elem.group.find(v => v instanceof ContentGroup)
+                if (content !== undefined) {
+                    this.removeGroup({ group: content })
+                    continue;
+                }
+    
+                for (const group of elem.group) {
+                    group.elems.forEach(v => v.fixed = true);
+                }
             }
         }
 
-        console.log(util.inspect(this.holderArray, false, null, true))
+        const secondMappedProcessor: ProcessorType = {
+            FootnoteOpen: [ processFootnoteOpen ],
+            SquareBracketClose: [ processFootnoteClose ]
+        }
+        const secondGrouping = () => {
+            for (let idx = 0; idx < this.holderArray.length; idx++) {
+                const elem = this.holderArray[idx];
+    
+                if (elem.fixed) {
+                    continue;
+                }
+    
+                if (elem.ignore) {
+                    elem.group.forEach(group => this.removeGroup({ group }))
+                    continue;
+                }
+
+                const footnote = elem.group.find(v => v instanceof FootnoteGroup)
+                if (footnote !== undefined) {
+                    if (footnote.elems.length !== 3) {
+                        this.removeGroup({ group: footnote })
+                        continue;
+                    }
+                }
+
+                for (const group of elem.group) {
+                    group.elems.forEach(v => v.fixed = true);
+                }
+            }
+        }
+
+        const processorTuple: [ProcessorType, ()=>void][] = [[firstMappedProcessor, firstGrouping], [secondMappedProcessor, secondGrouping]]
+
+        for (const [currentMappedProcessor, currentGrouping] of processorTuple) {
+            for (let idx = 0; idx < this.holderArray.length; idx++) {
+                const elem = this.holderArray[idx];
+                const props: ProcessorProps = { idx, setIdx: (v: number) => (idx = v) };
+                const currentProcessor = currentMappedProcessor[elem.type];
+                if (currentProcessor !== undefined) {
+                    for (const processor of currentProcessor) {
+                        processor(props)
+                    }
+                    continue;
+                }
+            }
+            currentGrouping();
+            this.holderArray = this.holderArray.filter(v => !v.ignore)
+        }
+        
+        // console.log(this.holderArray)
+        // console.log(util.inspect(this.groupArray, false, null, true))
+        console.log(util.inspect(this.holderArray, false, 3, true))
     }
 
     parse() {

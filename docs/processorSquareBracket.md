@@ -40,3 +40,34 @@ bracketCount는 adjBrackets의 개수입니다.\
 props.setIdx(props.idx + adjBrackets.length - 1);
 ```
 인접한 열기 문법 brackets은 이미 처리되었으므로 건너뜁시다.
+
+### 닫기 문법
+```ts
+const adjBrackets = [elem];
+
+let lastRange: Range = elem.range;
+let bracketCount = 1; // 3 이상 부터는 모두 무쓸모
+for (const subElem of this.holderArray.slice(props.idx + 1)) {
+    if (subElem.type === "SquareBracketClose" && lastRange.isAdjacent(subElem.range)) {
+        bracketCount++;
+        if (bracketCount > 2) {
+            subElem.isObsolete = true;
+        }
+        adjBrackets.push(subElem);
+        lastRange = subElem.range;
+        continue;
+    }
+    break;
+}
+```
+위의 열기 문법의 adjBrackets 저장 방법과 동일합니다.
+
+```ts
+const firstItem = squareBracketArray[0];
+if (firstItem === undefined) {
+    adjBrackets.forEach((v) => (v.isObsolete = true));
+    // 인접한 bracket은 pass해도 됨
+    props.setIdx(props.idx + adjBrackets.length - 1);
+    return;
+}
+```
