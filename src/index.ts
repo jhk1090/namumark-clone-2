@@ -28,6 +28,11 @@ import {
     FootnoteGroup,
     CommentGroup,
     MathTagGroup,
+    DecoCarotGroup,
+    DecoUnderbarGroup,
+    DecoCommaGroup,
+    DecoHyphenGroup,
+    DecoTildeGroup,
 } from "./elem";
 const util = require("node:util");
 
@@ -198,6 +203,14 @@ export class NamuMark {
         let headingOpenElement: HolderElem | undefined = undefined;
         let mathOpenElement: HolderElem | undefined = undefined;
         const footnoteQueue: [HolderElem, HolderElem][] = [];
+        const decoArray: { [k in HolderType]?: HolderElem[][] } = {
+            Quote: [],
+            Underbar: [],
+            Hyphen: [],
+            Tilde: [],
+            Carot: []
+        }
+        let decoCommaArray: { value: HolderElem[]; max: number; }[] = [];
 
         interface ProcessorProps {
             idx: number;
@@ -488,6 +501,84 @@ export class NamuMark {
 
             this.pushGroup({ group: new FootnoteGroup(), elems: [...lastTuple, elem] })
         }
+        const processTextDecoration = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+
+            const adjDecoration = [elem];
+            let lastRange: Range = elem.range;
+            for (const subElem of this.holderArray.slice(props.idx + 1)) {
+                if (subElem.type === elem.type && lastRange.isAdjacent(subElem.range)) {
+                    adjDecoration.push(subElem);
+                    lastRange = subElem.range;
+                    continue;
+                }
+                break;
+            }
+
+            if (adjDecoration.length < 2) {
+                props.setIdx(props.idx + adjDecoration.length - 1);
+                return;
+            }
+
+            
+            if (elem.type !== "Quote") {
+                decoArray[elem.type] = (decoArray[elem.type] as HolderElem[][]).filter(v => v.length === 2 && v[0].eolRange.isSame(elem.eolRange))
+
+                let referencedArray = decoArray[elem.type] as HolderElem[][];
+    
+                if (referencedArray.length === 0) {
+                    referencedArray.push(adjDecoration);
+                    props.setIdx(props.idx + adjDecoration.length - 1);
+                    return;
+                }
+
+                let correspondedGroup: Group = new Group();
+                switch (elem.type) {
+                    case "Carot":
+                        correspondedGroup = new DecoCarotGroup();
+                        break;
+                    case "Underbar":
+                        correspondedGroup = new DecoUnderbarGroup();
+                        break;
+                    case "Comma":
+                        correspondedGroup = new DecoCommaGroup();
+                        break;
+                    case "Tilde":
+                        correspondedGroup = new DecoTildeGroup();
+                        break;
+                    case "Hyphen":
+                        correspondedGroup = new DecoHyphenGroup();
+                        break;
+                    default:
+                        break;
+                }
+
+                this.pushGroup({ group: correspondedGroup, elems: [...referencedArray[0].slice(-2), ...adjDecoration.slice(0, 2)] })
+                referencedArray[0].splice(-2, 2);
+                referencedArray.push(adjDecoration.slice(2))
+
+                props.setIdx(props.idx + adjDecoration.length - 1);
+            } else {
+                /*
+                decoCommaArray = decoCommaArray.filter(v => v.value.length >= 2 && v.value[0].eolRange.isSame(elem.eolRange))
+
+                if (decoCommaArray.length === 0) {
+                    decoCommaArray.push({ value: adjDecoration, max: 0 })
+                    props.setIdx(props.idx + adjDecoration.length - 1);
+                    return;
+                }
+
+                for (const decoComma of decoCommaArray) {
+                    const prevMax = decoComma.max;
+                    if (adjDecoration.length > prevMax) {
+                        decoComma.max = adjDecoration.length;
+                    } else {
+                        continue;
+                    }
+                }
+                */
+            }
+        }
 
         type ProcessorType = { [k in HolderType]?: ((props: ProcessorProps) => void)[] };
 
@@ -648,7 +739,97 @@ export class NamuMark {
             }
         }
 
-        const processorTuple: [ProcessorType, ()=>void][] = [[firstMappedProcessor, firstGrouping], [secondMappedProcessor, secondGrouping]]
+        const thirdMappedProcessor: ProcessorType = {
+            Quote: [],
+            Underbar: [processTextDecoration],
+            Tilde: [processTextDecoration],
+            Carot: [processTextDecoration],
+            Comma: [processTextDecoration],
+            Hyphen: [processTextDecoration],
+        };
+        const thirdGrouping = () => {
+            for (let idx = 0; idx < this.holderArray.length; idx++) {
+                const elem = this.holderArray[idx];
+    
+                this.holderArray = this.holderArray.filter(v => {
+                    if (v.ignore) {
+                        v.group.forEach(group => this.removeGroup({ group }))
+                        return false;
+                    }
+                    return true;
+                })
+                
+                if (elem.fixed) {
+                    continue;
+                }
+
+                const underbar = elem.group.find(v => v instanceof DecoUnderbarGroup);
+                if (underbar !== undefined) {
+                    if (underbar.elems.length !== 4) {
+                        this.removeGroup({ group: underbar });
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex( v => v.uuid === underbar.elems[1].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === underbar.elems[2].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    sliced.forEach(v => v.ignore = true)
+                }
+
+                const tilde = elem.group.find(v => v instanceof DecoTildeGroup);
+                if (tilde !== undefined) {
+                    if (tilde.elems.length !== 4) {
+                        this.removeGroup({ group: tilde });
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex( v => v.uuid === tilde.elems[1].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === tilde.elems[2].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    sliced.forEach(v => v.ignore = true)
+                }
+
+                const carot = elem.group.find(v => v instanceof DecoCarotGroup);
+                if (carot !== undefined) {
+                    if (carot.elems.length !== 4) {
+                        this.removeGroup({ group: carot });
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex( v => v.uuid === carot.elems[1].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === carot.elems[2].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    sliced.forEach(v => v.ignore = true)
+                }
+
+                const comma = elem.group.find(v => v instanceof DecoCommaGroup);
+                if (comma !== undefined) {
+                    if (comma.elems.length !== 4) {
+                        this.removeGroup({ group: comma });
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex( v => v.uuid === comma.elems[1].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === comma.elems[2].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    sliced.forEach(v => v.ignore = true)
+                }
+
+                const hyphen = elem.group.find(v => v instanceof DecoHyphenGroup);
+                if (hyphen !== undefined) {
+                    if (hyphen.elems.length !== 4) {
+                        this.removeGroup({ group: hyphen });
+                        continue;
+                    }
+                    const start = this.holderArray.findIndex( v => v.uuid === hyphen.elems[1].uuid)
+                    const end = this.holderArray.findIndex(v => v.uuid === hyphen.elems[2].uuid)
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1)
+                    sliced.forEach(v => v.ignore = true)
+                }
+
+                for (const group of elem.group) {
+                    group.elems.forEach(v => v.fixed = true);
+                }
+            }
+        }
+
+        const processorTuple: [ProcessorType, ()=>void][] = [[firstMappedProcessor, firstGrouping], [secondMappedProcessor, secondGrouping], [thirdMappedProcessor, thirdGrouping]]
 
         for (const [currentMappedProcessor, currentGrouping] of processorTuple) {
             for (let idx = 0; idx < this.holderArray.length; idx++) {
