@@ -1,41 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import {
-    TripleBracketContentGroup,
-    TripleBracketGroup,
-    CommentElem,
-    ContentGroup,
-    Elem,
-    FoldingBracketElem,
-    Group,
-    HeadingElem,
-    HolderElem,
-    HolderType,
-    HtmlBracketElem,
-    ParenthesisElem,
-    RawBracketElem,
-    SyntaxBracketElem,
-    SyntaxLanguageType,
-    TextColorBracketElem,
-    TextSizeBracketElem,
-    TextSizeType,
-    WikiBracketElem,
-    SquareBracketGroup,
-    DoubleSquareBracketGroup,
-    SingleSquareBracketGroup,
-    HeadingGroup,
-    ListGroup,
-    IndentGroup,
-    FootnoteGroup,
-    CommentGroup,
-    MathTagGroup,
-    DecoCarotGroup,
-    DecoUnderbarGroup,
-    DecoCommaGroup,
-    DecoHyphenGroup,
-    DecoTildeGroup,
-    DecoTripleQuoteGroup,
-    DecoDoubleQuoteGroup,
-} from "./elem";
+import { Elem, Group, GroupType, HolderElem, HolderType } from "./elem";
 const util = require("node:util");
 
 export class NamuMark {
@@ -211,9 +175,8 @@ export class NamuMark {
             Hyphen: [],
             Tilde: [],
             Carot: [],
-            Comma: []
+            Comma: [],
         };
-        let decoCommaArray: HolderElem[][] = [];
 
         interface ProcessorProps {
             idx: number;
@@ -221,7 +184,7 @@ export class NamuMark {
         }
         const processComment = (props: ProcessorProps) => {
             const end = this.holderArray.slice(props.idx).findIndex((v) => v.type === "Newline") + props.idx;
-            this.pushGroup({ group: new CommentGroup(), elems: this.holderArray.slice(props.idx, end) });
+            this.pushGroup({ group: new Group("Comment"), elems: this.holderArray.slice(props.idx, end) });
         };
         const processEscape = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
@@ -231,7 +194,7 @@ export class NamuMark {
                 return;
             }
             if (elem.range.isAdjacent(next.range)) {
-                this.pushGroup({ group: new (next.type === "TripleBracketOpen" ? TripleBracketContentGroup : ContentGroup)(), elems: [elem, next] });
+                this.pushGroup({ group: new Group(next.type === "TripleBracketOpen" ? "TripleBracketContent" : "Content"), elems: [elem, next] });
 
                 // 다음 text 건너뛰기
                 if (next.type === "TripleBracketClose" || next.type === "TripleBracketOpen") {
@@ -254,9 +217,7 @@ export class NamuMark {
                 return;
             }
 
-            const group: Group = lastItem.group.find((v) => v instanceof TripleBracketContentGroup)
-                ? new TripleBracketContentGroup()
-                : new TripleBracketGroup();
+            const group: Group = new Group(lastItem.group.find((v) => v.type === "TripleBracketContent") ? "TripleBracketContent" : "TripleBracket");
             this.pushGroup({ group, elems: [lastItem, elem] });
         };
         const processSquareBracketOpen = (props: ProcessorProps) => {
@@ -364,7 +325,7 @@ export class NamuMark {
 
                 // 같은 개행 줄에 있는지 여부
                 if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
-                    const group: Group = new (bracket.value.length >= 2 && bracket.max >= 2 ? DoubleSquareBracketGroup : SingleSquareBracketGroup)();
+                    const group: Group = new Group(bracket.value.length >= 2 && bracket.max >= 2 ? "DoubleSquareBracket" : "SingleSquareBracket");
                     if (bracket.value.length >= 2 && bracket.max >= 2) {
                         // 링크 문법
                         const originIndex = this.holderArray.findIndex((v) => v.uuid === bracket.value[0].uuid);
@@ -400,7 +361,7 @@ export class NamuMark {
                         let lock = false;
                         const filteredArray = [];
                         for (const element of fromPipeToElemArray) {
-                            if (element.group.find((v) => v instanceof TripleBracketGroup)) {
+                            if (element.group.find((v) => v.type === "TripleBracket")) {
                                 lock = !lock;
                                 continue;
                             } else {
@@ -417,14 +378,14 @@ export class NamuMark {
                             continue;
                         }
 
-                        const group: Group = new DoubleSquareBracketGroup();
+                        const group: Group = new Group("DoubleSquareBracket");
                         this.pushGroup({
                             group,
                             elems: [adjBrackets[0], adjBrackets[1], this.holderArray[firstPipeIndex], bracket.value[0], bracket.value[1]],
                         });
                     } else {
                         // 매크로
-                        const group: Group = new SingleSquareBracketGroup();
+                        const group: Group = new Group("SingleSquareBracket");
                         const isSucceed = parseParenthesis(group);
                         if (!isSucceed) {
                             bracket.max = prevMax;
@@ -462,7 +423,7 @@ export class NamuMark {
                     return;
                 }
 
-                this.pushGroup({ group: new HeadingGroup(), elems: [elem, headingOpenElement] });
+                this.pushGroup({ group: new Group("Heading"), elems: [elem, headingOpenElement] });
                 return;
             }
         };
@@ -486,7 +447,7 @@ export class NamuMark {
                 return;
             }
 
-            this.pushGroup({ group: new MathTagGroup(), elems: [mathOpenElement, elem] });
+            this.pushGroup({ group: new Group("MathTag"), elems: [mathOpenElement, elem] });
             mathOpenElement = undefined;
         };
         const processFootnoteOpen = (props: ProcessorProps) => {
@@ -518,18 +479,18 @@ export class NamuMark {
                 return;
             }
 
-            this.pushGroup({ group: new FootnoteGroup(), elems: [...lastTuple, elem] });
+            this.pushGroup({ group: new Group("Footnote"), elems: [...lastTuple, elem] });
         };
         const processTextDecoration = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
-            const elemType = elem.type as "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma"
-            
+            const elemType = elem.type as "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma";
+
             const adjDecoration = [elem];
             let lastRange: Range = elem.range;
             let decoCount = 1;
             const decoCountMax = elemType === "Quote" ? 3 : 2;
             for (const subElem of this.holderArray.slice(props.idx + 1)) {
-                if (decoCount === decoCountMax)  {
+                if (decoCount === decoCountMax) {
                     break;
                 }
                 if (subElem.type === elem.type && lastRange.isAdjacent(subElem.range)) {
@@ -546,7 +507,7 @@ export class NamuMark {
                 return;
             }
 
-            if (elemType !== "Quote") {    
+            if (elemType !== "Quote") {
                 let referencedArray = decoArray[elemType];
 
                 if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange)) {
@@ -555,22 +516,22 @@ export class NamuMark {
                     return;
                 }
 
-                let correspondedGroup: Group = new Group();
+                let correspondedGroup: Group = new Group("");
                 switch (elemType) {
                     case "Carot":
-                        correspondedGroup = new DecoCarotGroup();
+                        correspondedGroup.type = "DecoCarot";
                         break;
                     case "Underbar":
-                        correspondedGroup = new DecoUnderbarGroup();
+                        correspondedGroup.type = "DecoUnderbar";
                         break;
                     case "Comma":
-                        correspondedGroup = new DecoCommaGroup();
+                        correspondedGroup.type = "DecoComma";
                         break;
                     case "Tilde":
-                        correspondedGroup = new DecoTildeGroup();
+                        correspondedGroup.type = "DecoTilde";
                         break;
                     case "Hyphen":
-                        correspondedGroup = new DecoHyphenGroup();
+                        correspondedGroup.type = "DecoHyphen";
                         break;
                     default:
                         break;
@@ -589,19 +550,24 @@ export class NamuMark {
                     return;
                 }
 
-                let correspondedGroup: Group = referencedArray.length === 3 && adjDecoration.length === 3 ? new DecoTripleQuoteGroup() : new DecoDoubleQuoteGroup()
+                let correspondedGroup: Group = new Group(
+                    referencedArray.length === 3 && adjDecoration.length === 3 ? "DecoTripleQuote" : "DecoDoubleQuote"
+                );
 
                 if (referencedArray.length > adjDecoration.length) {
                     // ''' asdf ''
-                    this.pushGroup({ group: correspondedGroup, elems: [...referencedArray.slice(Number(`-${adjDecoration.length}`)), ...adjDecoration] })
+                    this.pushGroup({
+                        group: correspondedGroup,
+                        elems: [...referencedArray.slice(Number(`-${adjDecoration.length}`)), ...adjDecoration],
+                    });
                     decoArray[elemType] = [];
-    
+
                     props.setIdx(props.idx + adjDecoration.length - 1);
                 } else {
                     // '' asdf '' || '' asdf '''
-                    this.pushGroup({ group: correspondedGroup, elems: [...referencedArray, ...adjDecoration.slice(0, referencedArray.length)] })
+                    this.pushGroup({ group: correspondedGroup, elems: [...referencedArray, ...adjDecoration.slice(0, referencedArray.length)] });
                     decoArray[elemType] = [];
-    
+
                     props.setIdx(props.idx + referencedArray.length - 1);
                 }
             }
@@ -637,9 +603,9 @@ export class NamuMark {
                     continue;
                 }
 
-                const doubleSquare = elem.group.find((v) => v instanceof DoubleSquareBracketGroup);
+                const doubleSquare = elem.group.find((v) => v.type === "DoubleSquareBracket");
                 if (doubleSquare !== undefined) {
-                    const foundGroup = elem.group.find((v) => v instanceof SingleSquareBracketGroup);
+                    const foundGroup = elem.group.find((v) => v.type === "SingleSquareBracket");
                     if (foundGroup !== undefined) {
                         this.removeGroup({ group: foundGroup });
                     }
@@ -659,7 +625,7 @@ export class NamuMark {
                     (pipeIndex !== -1 ? sliced.slice(0, pipeIndex) : sliced).forEach((v) => (v.ignore = true));
                 }
 
-                const singleSquare = elem.group.find((v) => v instanceof SingleSquareBracketGroup);
+                const singleSquare = elem.group.find((v) => v.type === "SingleSquareBracket");
                 if (singleSquare !== undefined) {
                     if (singleSquare.elems.length !== 2 && singleSquare.elems.length !== 4) {
                         this.removeGroup({ group: singleSquare });
@@ -676,7 +642,7 @@ export class NamuMark {
                     });
                 }
 
-                const triple = elem.group.find((v) => v instanceof TripleBracketGroup);
+                const triple = elem.group.find((v) => v.type === "TripleBracket");
                 if (triple !== undefined) {
                     if (triple.elems.length !== 2) {
                         this.removeGroup({ group: triple });
@@ -684,7 +650,7 @@ export class NamuMark {
                     }
                 }
 
-                const heading = elem.group.find((v) => v instanceof HeadingGroup);
+                const heading = elem.group.find((v) => v.type === "Heading");
                 if (heading !== undefined) {
                     if (heading.elems.length !== 2) {
                         this.removeGroup({ group: heading });
@@ -692,7 +658,7 @@ export class NamuMark {
                     }
                 }
 
-                const mathtag = elem.group.find((v) => v instanceof MathTagGroup);
+                const mathtag = elem.group.find((v) => v.type === "MathTag");
                 if (mathtag !== undefined) {
                     if (mathtag.elems.length !== 2) {
                         this.removeGroup({ group: mathtag });
@@ -715,21 +681,21 @@ export class NamuMark {
                     sliced.forEach((v) => (v.ignore = true));
                 }
 
-                const tripleContent = elem.group.find((v) => v instanceof TripleBracketContentGroup);
+                const tripleContent = elem.group.find((v) => v.type === "TripleBracketContent");
                 if (tripleContent !== undefined) {
                     tripleContent.elems.forEach((v) => (v.ignore = true));
                     this.removeGroup({ group: tripleContent });
                     continue;
                 }
 
-                const content = elem.group.find((v) => v instanceof ContentGroup);
+                const content = elem.group.find((v) => v.type === "Content");
                 if (content !== undefined) {
                     content.elems.forEach((v) => (v.ignore = true));
                     this.removeGroup({ group: content });
                     continue;
                 }
 
-                const comment = elem.group.find((v) => v instanceof CommentGroup);
+                const comment = elem.group.find((v) => v.type === "Comment");
                 if (comment !== undefined) {
                     comment.elems.forEach((v) => (v.ignore = true));
                     this.removeGroup({ group: comment });
@@ -762,7 +728,7 @@ export class NamuMark {
                     continue;
                 }
 
-                const footnote = elem.group.find((v) => v instanceof FootnoteGroup);
+                const footnote = elem.group.find((v) => v.type === "Footnote");
                 if (footnote !== undefined) {
                     if (footnote.elems.length !== 3) {
                         this.removeGroup({ group: footnote });
@@ -800,45 +766,35 @@ export class NamuMark {
                     continue;
                 }
 
-                const underbar = elem.group.find((v) => v instanceof DecoUnderbarGroup);
-                const tilde = elem.group.find((v) => v instanceof DecoTildeGroup);
-                const carot = elem.group.find((v) => v instanceof DecoCarotGroup);
-                const comma = elem.group.find((v) => v instanceof DecoCommaGroup);
-                const hyphen = elem.group.find((v) => v instanceof DecoHyphenGroup);
-                const doublequote = elem.group.find((v) => v instanceof DecoDoubleQuoteGroup);
-                const triplequote = elem.group.find((v) => v instanceof DecoTripleQuoteGroup);
+                const groupTokens: GroupType[] = [
+                    "DecoUnderbar",
+                    "DecoTilde",
+                    "DecoCarot",
+                    "DecoComma",
+                    "DecoHyphen",
+                    "DecoDoubleQuote",
+                    "DecoTripleQuote",
+                ];
+                const filteredGroup = elem.group.filter((v) => groupTokens.includes(v.type));
 
-                const groups = [underbar, tilde, carot, comma, hyphen, doublequote, triplequote]
-
-                for (const group of groups) {
-                    if (group !== undefined) {
-                        if ((group instanceof DecoTripleQuoteGroup) && group.elems.length !== 6) {
-                            this.removeGroup({ group });
-                            continue;
-                        }
-                        if (!(group instanceof DecoTripleQuoteGroup) && group.elems.length !== 4) {
-                            this.removeGroup({ group });
-                            continue;
-                        }
-                        const start = this.holderArray.findIndex((v) => v.uuid === group.elems[1].uuid);
-                        const end = this.holderArray.findIndex((v) => v.uuid === group.elems[2].uuid);
-                        const sliced = this.holderArray
-                            .slice(start, end + 1)
-                            .toSpliced(0, 1)
-                            .toSpliced(-1, 1);
-                        sliced.forEach((v) => {
-                            const underbar = v.group.find((v) => v instanceof DecoUnderbarGroup);
-                            const tilde = v.group.find((v) => v instanceof DecoTildeGroup);
-                            const carot = v.group.find((v) => v instanceof DecoCarotGroup);
-                            const comma = v.group.find((v) => v instanceof DecoCommaGroup);
-                            const hyphen = v.group.find((v) => v instanceof DecoHyphenGroup);
-                            const doublequote = v.group.find((v) => v instanceof DecoDoubleQuoteGroup);
-                            const triplequote = v.group.find((v) => v instanceof DecoTripleQuoteGroup);
-                            if (underbar !== undefined || tilde !== undefined || carot !== undefined || comma !== undefined || hyphen !== undefined || doublequote !== undefined || triplequote !== undefined) {
-                                v.ignore = true
-                            }
-                        });
+                for (const group of filteredGroup) {
+                    if (group.type === "DecoTripleQuote" && group.elems.length !== 6) {
+                        this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group });
                     }
+                    if (group.type !== "DecoTripleQuote" && group.elems.length !== 4) {
+                        this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group });
+                    }
+                    const start = this.holderArray.findIndex((v) => v.uuid === group.elems[1].uuid);
+                    const end = this.holderArray.findIndex((v) => v.uuid === group.elems[2].uuid);
+                    const sliced = this.holderArray
+                        .slice(start, end + 1)
+                        .toSpliced(0, 1)
+                        .toSpliced(-1, 1);
+                    sliced.forEach((v) => {
+                        if (v.group.filter((v) => groupTokens.includes(v.type)).length !== 0) {
+                            v.ignore = true;
+                        }
+                    });
                 }
 
                 for (const group of elem.group) {

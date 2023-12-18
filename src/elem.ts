@@ -116,50 +116,16 @@ export class ParenthesisElem extends UnableChild {
     }
 }
 
+export type GroupType = "" | "Comment" | "Content" | "TripleBracket" | "TripleBracketContent" | "SquareBracket" | "SingleSquareBracket" | "DoubleSquareBracket" | "Heading" | "MathTag" | "Indent" | "List" | "Cite" | "Footnote" | "DecoDoubleQuote" | "DecoTripleQuote" | "DecoUnderbar" | "DecoTilde" | "DecoCarot" | "DecoComma" | "DecoHyphen"
+
 export class Group {
     uuid: string = uuidv4();
     elems: HolderElem[] = [];
+    type: GroupType = "";
+    constructor(type: GroupType) {
+        this.type = type;
+    }
 }
-
-export class CommentGroup extends Group {}
-
-export class ContentGroup extends Group {}
-
-export class TripleBracketGroup extends Group {}
-
-export class TripleBracketContentGroup extends Group {}
-
-export class SquareBracketGroup extends Group {}
-
-export class SingleSquareBracketGroup extends Group {}
-
-export class DoubleSquareBracketGroup extends Group {}
-
-export class HeadingGroup extends Group {}
-
-export class MathTagGroup extends Group {}
-
-export class IndentGroup extends Group {}
-
-export class ListGroup extends Group {}
-
-export class CiteGroup extends Group {}
-
-export class FootnoteGroup extends Group {}
-
-export class DecoDoubleQuoteGroup extends Group {}
-
-export class DecoTripleQuoteGroup extends Group {}
-
-export class DecoUnderbarGroup extends Group {}
-
-export class DecoTildeGroup extends Group {}
-
-export class DecoCarotGroup extends Group {}
-
-export class DecoCommaGroup extends Group {}
-
-export class DecoHyphenGroup extends Group {}
 
 export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "Indent" | "UnorderedList" | "OrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
 
