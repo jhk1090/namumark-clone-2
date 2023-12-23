@@ -857,9 +857,11 @@ export class NamuMark {
                 for (const group of filteredGroup) {
                     if (group.type === "DecoTripleQuote" && group.elems.length !== 6) {
                         this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group });
+                        continue;
                     }
                     if (group.type !== "DecoTripleQuote" && group.elems.length !== 4) {
                         this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group });
+                        continue;
                     }
                     const start = this.holderArray.findIndex((v) => v.uuid === group.elems[1].uuid);
                     const end = this.holderArray.findIndex((v) => v.uuid === group.elems[2].uuid);
@@ -880,10 +882,20 @@ export class NamuMark {
             }
         };
 
+        const fourthMappedProcessor: ProcessorType = {
+            Pipe: [],
+            TableArgumentOpen: [],
+            TableArgumentClose: []
+        }
+        const fourthGrouping = () => {
+
+        }
+
         const processorTuple: [ProcessorType, () => void][] = [
             [firstMappedProcessor, firstGrouping],
             [secondMappedProcessor, secondGrouping],
             [thirdMappedProcessor, thirdGrouping],
+            [fourthMappedProcessor, fourthGrouping]
         ];
 
         for (const [currentMappedProcessor, currentGrouping] of processorTuple) {
@@ -913,7 +925,7 @@ export class NamuMark {
 
         // console.log(this.holderArray)
         // console.log(util.inspect(this.groupArray, false, null, true))
-        console.log(util.inspect(this.holderArray, false, 3, true));
+        // console.log(util.inspect(this.holderArray, false, 3, true));
     }
 
     parse() {
