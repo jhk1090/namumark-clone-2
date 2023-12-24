@@ -618,6 +618,7 @@ export class NamuMark {
                     if (pipeIndex !== -1) {
                         sliced.slice(0, pipeIndex).forEach(v => v.ignore = true);
                         const pipeHolder = sliced[pipeIndex];
+                        console.log("double")
                         sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
                     } else {
                         sliced.forEach(v => v.ignore = true);
@@ -667,15 +668,23 @@ export class NamuMark {
                     let detected = false;
                     let ignoredRange = new Range(0, 1);
                     const doMatchIgnoring = () => {
-                        const availableRange = new Range(ignoredRange.end, triple.elems[1].range.start);
-                        this.holderArray.forEach(v => {
-                            if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
-                                v.ignore = true;
-                            }
-                            if (v.range.isContainedIn(availableRange)) {
-                                v.availableRange = availableRange;
-                            }
-                        })
+                        if (ignoredRange.end === triple.elems[1].range.start) {
+                            this.holderArray.forEach(v => {
+                                if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
+                                    v.ignore = true;
+                                }
+                            })
+                        } else {
+                            const availableRange = new Range(ignoredRange.end, triple.elems[1].range.start);
+                            this.holderArray.forEach(v => {
+                                if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
+                                    v.ignore = true;
+                                }
+                                if (v.range.isContainedIn(availableRange)) {
+                                    v.availableRange = availableRange;
+                                }
+                            })
+                        }
                     }
                     const doWholeIgnoring = () => {
                         const start = this.holderArray.findIndex((v) => v.uuid === triple.elems[0].uuid);
@@ -730,6 +739,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
+                    console.log('heading')
                     sliced.forEach(v => v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start))
 
                     return;
@@ -843,6 +853,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
+                    console.log('footnote')
                     sliced.forEach((v) => (v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start)));
                 }
 
@@ -904,6 +915,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
+                    console.log("deco")
                     sliced.forEach((v) => {
                         if (v.group.filter((v) => groupTokens.includes(v.type)).length !== 0) {
                             v.ignore = true;
