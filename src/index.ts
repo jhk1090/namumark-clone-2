@@ -479,6 +479,10 @@ export class NamuMark {
                 return;
             }
 
+            if (lastTuple[0].availableRange !== elem.availableRange) {
+                return;
+            }
+
             this.pushGroup({ group: new Group("Footnote"), elems: [...lastTuple, elem] });
         };
         const processTextDecoration = (props: ProcessorProps) => {
@@ -510,7 +514,7 @@ export class NamuMark {
             if (elemType !== "Quote") {
                 let referencedArray = decoArray[elemType];
 
-                if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange)) {
+                if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange) || !(referencedArray[0].availableRange === elem.availableRange)) {
                     decoArray[elemType] = [...adjDecoration];
                     props.setIdx(props.idx + adjDecoration.length - 1);
                     return;
@@ -544,7 +548,7 @@ export class NamuMark {
             } else {
                 let referencedArray = decoArray[elemType];
 
-                if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange)) {
+                if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange) || !(referencedArray[0].availableRange === elem.availableRange)) {
                     decoArray[elemType] = [...adjDecoration];
                     props.setIdx(props.idx + adjDecoration.length - 1);
                     return;
@@ -610,7 +614,15 @@ export class NamuMark {
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
                     const pipeIndex = sliced.findIndex((v) => v.type === "Pipe");
-                    (pipeIndex !== -1 ? sliced.slice(0, pipeIndex) : sliced).forEach((v) => (v.ignore = true));
+                    
+                    if (pipeIndex !== -1) {
+                        sliced.slice(0, pipeIndex).forEach(v => v.ignore = true);
+                        const pipeHolder = sliced[pipeIndex];
+                        sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
+                    } else {
+                        sliced.forEach(v => v.ignore = true);
+                    }
+
                     return;
                 }
 
@@ -653,11 +665,15 @@ export class NamuMark {
                     const content = this.wikiText.substring(triple.elems[0].range.end)
                     let match: RegExpExecArray | null;
                     let detected = false;
-                    let detectedRange = new Range(0, 1);
+                    let ignoredRange = new Range(0, 1);
                     const doMatchIgnoring = () => {
+                        const availableRange = new Range(ignoredRange.end, triple.elems[1].range.start);
                         this.holderArray.forEach(v => {
-                            if (v.type !== "TripleBracketOpen" && v.range.isOverlap(detectedRange)) {
+                            if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
                                 v.ignore = true;
+                            }
+                            if (v.range.isContainedIn(availableRange)) {
+                                v.availableRange = availableRange;
                             }
                         })
                     }
@@ -671,12 +687,12 @@ export class NamuMark {
                         sliced.forEach((v) => (v.ignore = true));
                     }
                     if (!detected && (match = sizingRegex.exec(content)) !== null) {
-                        detectedRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + sizingRegex.lastIndex)
+                        ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + sizingRegex.lastIndex)
                         doMatchIgnoring();
                         detected = true;
                     }
                     if (!detected && (match = wikiRegex.exec(content)) !== null) {
-                        detectedRange = new Range(triple.elems[0].range.end, elem.eolRange.end)
+                        ignoredRange = new Range(triple.elems[0].range.end, elem.eolRange.end)
                         doMatchIgnoring();
                         detected = true;
                     }
@@ -685,7 +701,7 @@ export class NamuMark {
                         detected = true;
                     }
                     if (!detected && (match = textColorRegex.exec(content)) !== null) {
-                        detectedRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + textColorRegex.lastIndex)
+                        ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + textColorRegex.lastIndex)
                         doMatchIgnoring();
                         detected = true;
                     }
@@ -707,6 +723,15 @@ export class NamuMark {
                         flag.skipFixing = true;
                         return;
                     }
+
+                    const start = this.holderArray.findIndex((v) => v.uuid === heading.elems[0].uuid);
+                    const end = this.holderArray.findIndex((v) => v.uuid === heading.elems[1].uuid);
+                    const sliced = this.holderArray
+                        .slice(start, end + 1)
+                        .toSpliced(0, 1)
+                        .toSpliced(-1, 1);
+                    sliced.forEach(v => v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start))
+
                     return;
                 }
 
@@ -811,6 +836,14 @@ export class NamuMark {
                         this.removeGroup({ group: footnote });
                         continue;
                     }
+
+                    const start = this.holderArray.findIndex((v) => v.uuid === footnote.elems[1].uuid);
+                    const end = this.holderArray.findIndex((v) => v.uuid === footnote.elems[2].uuid);
+                    const sliced = this.holderArray
+                        .slice(start, end + 1)
+                        .toSpliced(0, 1)
+                        .toSpliced(-1, 1);
+                    sliced.forEach((v) => (v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start)));
                 }
 
                 for (const group of elem.group) {
@@ -859,12 +892,14 @@ export class NamuMark {
                         this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group });
                         continue;
                     }
-                    if (group.type !== "DecoTripleQuote" && group.elems.length !== 4) {
+                    if (group.type !== "DecoDoubleQuote" && group.elems.length !== 4) {
                         this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group });
                         continue;
                     }
-                    const start = this.holderArray.findIndex((v) => v.uuid === group.elems[1].uuid);
-                    const end = this.holderArray.findIndex((v) => v.uuid === group.elems[2].uuid);
+                    const startLocation = group.type === "DecoTripleQuote" ? 2 : 1;
+                    const endLocation = group.type === "DecoTripleQuote" ? 3 : 2;
+                    const start = this.holderArray.findIndex((v) => v.uuid === group.elems[startLocation].uuid);
+                    const end = this.holderArray.findIndex((v) => v.uuid === group.elems[endLocation].uuid);
                     const sliced = this.holderArray
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
@@ -872,6 +907,8 @@ export class NamuMark {
                     sliced.forEach((v) => {
                         if (v.group.filter((v) => groupTokens.includes(v.type)).length !== 0) {
                             v.ignore = true;
+                        } else {
+                            v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start)
                         }
                     });
                 }
@@ -888,7 +925,7 @@ export class NamuMark {
             TableArgumentClose: []
         }
         const fourthGrouping = () => {
-
+            
         }
 
         const processorTuple: [ProcessorType, () => void][] = [
@@ -925,7 +962,7 @@ export class NamuMark {
 
         // console.log(this.holderArray)
         // console.log(util.inspect(this.groupArray, false, null, true))
-        // console.log(util.inspect(this.holderArray, false, 3, true));
+        console.log(util.inspect(this.holderArray, false, 3, true));
     }
 
     parse() {
