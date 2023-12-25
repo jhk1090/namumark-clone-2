@@ -13,6 +13,10 @@ export class Range {
         this.end = end;
     }
 
+    toString() {
+        return `Range(${this.start}, ${this.end})`
+    }
+
     isSame(otherRange: Range) {
         return this.start === otherRange.start && this.end === otherRange.end;
     }

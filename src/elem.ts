@@ -116,7 +116,7 @@ export class ParenthesisElem extends UnableChild {
     }
 }
 
-export type GroupType = "" | "Comment" | "Content" | "TripleBracket" | "TripleBracketContent" | "SquareBracket" | "SingleSquareBracket" | "DoubleSquareBracket" | "Heading" | "MathTag" | "Indent" | "List" | "Cite" | "Footnote" | "DecoDoubleQuote" | "DecoTripleQuote" | "DecoUnderbar" | "DecoTilde" | "DecoCarot" | "DecoComma" | "DecoHyphen"
+export type GroupType = "" | "Comment" | "Content" | "TripleBracket" | "TripleBracketContent" | "SquareBracket" | "SingleSquareBracket" | "DoubleSquareBracket" | "Heading" | "MathTag" | "Indent" | "List" | "Cite" | "Footnote" | "DecoDoubleQuote" | "DecoTripleQuote" | "DecoUnderbar" | "DecoTilde" | "DecoCarot" | "DecoComma" | "DecoHyphen" | "Table" | "TableRow" | "TableArgument"
 
 export class Group {
     uuid: string = uuidv4();
@@ -132,7 +132,7 @@ export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "Parenth
 export class HolderElem {
     range: Range = new Range(0, 1);
     eolRange: Range = new Range(0, 1);
-    availableRange?: Range;
+    availableRange: Range = new Range(-1000, -999); // 기본 global 값 Range(-1000, -999)
     group: Group[] = [];
     type: HolderType = "";
     uuid: string = uuidv4();

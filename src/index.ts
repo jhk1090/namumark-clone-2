@@ -27,21 +27,13 @@ export class NamuMark {
 
     removeGroup(props: { group: Group }) {
         const targetIndex = this.groupArray.findIndex((v) => v.uuid === props.group.uuid);
+        if (targetIndex === -1) {
+            return;
+        }
         for (const elem of this.groupArray[targetIndex].elems) {
             elem.group = elem.group.filter((v) => v.uuid !== props.group.uuid);
         }
         this.groupArray.splice(targetIndex, 1);
-    }
-
-    removeFromGroup(props: { group: Group; elems: HolderElem[] }) {
-        for (const elem of props.elems) {
-            const idx = props.group.elems.findIndex((v) => v.uuid === elem.uuid);
-            if (idx !== -1) {
-                props.group.elems.splice(idx, 1);
-            }
-            elem.group = elem.group.filter((v) => v.uuid !== props.group.uuid);
-        }
-        props.group.elems.sort((a, b) => a.range.start - b.range.start);
     }
 
     processRedirect() {
@@ -113,8 +105,8 @@ export class NamuMark {
         const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1];
         const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1];
         const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1];
-        const tableArgumentOpen: offsetNone = [/\</g, "TableArgumentOpen"];
-        const tableArgumentClose: offsetNone = [/\</g, "TableArgumentClose"];
+        const tableArgumentOpen: offsetOnlyStart = [/(\||\>)\</g, "TableArgumentOpen", 1];
+        const tableArgumentClose: offsetNone = [/\>/g, "TableArgumentClose"];
         const mathTagOpen: offsetNone = [/\<math\>/g, "MathTagOpen"];
         const mathTagClose: offsetNone = [/\<\/math\>/g, "MathTagClose"];
         const quote: offsetNone = [/\'/g, "Quote"];
@@ -184,7 +176,7 @@ export class NamuMark {
         }
         const processComment = (props: ProcessorProps) => {
             const end = this.holderArray.slice(props.idx).findIndex((v) => v.type === "Newline") + props.idx;
-            this.pushGroup({ group: new Group("Comment"), elems: this.holderArray.slice(props.idx, end) });
+            this.pushGroup({ group: new Group("Comment"), elems: this.holderArray.slice(props.idx, end + 1) });
         };
         const processEscape = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
@@ -576,6 +568,107 @@ export class NamuMark {
                 }
             }
         };
+        const tableArray: {[k: string]: {rowStartIndex: number; argumentHolder: HolderElem | null; verifier: HolderElem | null; data: HolderElem[][];}} = {};
+        const processTablePipe = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+            const next = this.holderArray[props.idx + 1];
+            if (next.type !== "Pipe") {
+                return;
+            }
+            
+            const adjNext = this.wikiText[next.range.end];
+            const adjPipe = [elem, next]
+            const currentTable = tableArray[elem.availableRange.toString()]
+
+            if (currentTable === undefined || currentTable.data[0].length === 0) {
+                if (this.wikiText.substring(elem.eolRange.start, elem.range.end).trim() !== "|") {
+                    props.setIdx(props.idx + adjPipe.length - 1);
+                    return;
+                }
+            }
+
+            if (currentTable === undefined) {
+                if (adjNext !== "\n") {
+                    tableArray[elem.availableRange.toString()] = {rowStartIndex: 0, data: [[...adjPipe]], verifier: null, argumentHolder: null}
+                }
+                props.setIdx(props.idx + adjPipe.length - 1);
+                return;
+            }
+
+            if (currentTable.verifier !== null) {
+                tableArray[elem.availableRange.toString()].rowStartIndex = currentTable.data[0].length;
+                currentTable.verifier = null;
+            }
+
+            tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
+            props.setIdx(props.idx + adjPipe.length - 1);
+            return;
+        }    
+        const processTableNewline = (props: ProcessorProps) => {
+            const prev = this.holderArray[props.idx - 1];
+            const elem = this.holderArray[props.idx];
+            if (prev === undefined) {
+                return;
+            }
+
+            const currentTable = tableArray[elem.availableRange.toString()]
+            if (currentTable === undefined || currentTable.data[0].length === 0) {
+                return;
+            }
+
+            const verifier = currentTable.verifier
+            if (verifier !== null) {
+                tableArray[elem.availableRange.toString()] = { data: [[], ...currentTable.data], rowStartIndex: 0, verifier: null, argumentHolder: null }
+                return;
+            }
+
+            if (prev.type === "Pipe" && prev.range.isAdjacent(elem.range)) {
+                this.pushGroup({group: new Group("TableRow"), elems: [ ...currentTable.data[0].slice(currentTable.rowStartIndex) ]})
+                tableArray[elem.availableRange.toString()].verifier = elem;
+                return;
+            }
+        }
+
+        const processTableArgumentOpen = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+
+            const currentTable = tableArray[elem.availableRange.toString()]
+            if (currentTable === undefined || currentTable.data[0].length === 0) {
+                return;
+            }
+
+            const argumentHolder = currentTable.argumentHolder;
+            if (argumentHolder === null || argumentHolder.type === "TableArgumentClose") {
+                if (argumentHolder !== null && !argumentHolder.range.isAdjacent(elem.range)) {
+                    return;
+                }
+                tableArray[elem.availableRange.toString()].argumentHolder = elem;
+                return;
+            }
+
+            tableArray[elem.availableRange.toString()].argumentHolder = null;
+            return;
+        }
+
+        const processTableArgumentClose = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+
+            const currentTable = tableArray[elem.availableRange.toString()]
+            if (currentTable === undefined || currentTable.data[0].length === 0) {
+                return;
+            }
+
+            const argumentHolder = currentTable.argumentHolder;
+            if (argumentHolder === null || argumentHolder.type === "TableArgumentClose") {
+                tableArray[elem.availableRange.toString()].argumentHolder = null;
+                return;
+            }
+
+            const argument = [argumentHolder, elem]
+            this.pushGroup({ group: new Group("TableArgument"), elems: [...argument] })
+            tableArray[elem.availableRange.toString()].data[0].push(...argument)
+            tableArray[elem.availableRange.toString()].argumentHolder = null;
+        }
 
         type ProcessorType = { [k in HolderType]?: ((props: ProcessorProps) => void)[] };
 
@@ -594,6 +687,14 @@ export class NamuMark {
         const firstGrouping = () => {
             const flag = { skipFixing: false };
             const mainGrouping = (elem: HolderElem, idx: number) => {
+                const comment = elem.group.find((v) => v.type === "Comment");
+                if (comment !== undefined) {
+                    comment.elems.forEach((v) => (v.ignore = true));
+                    this.removeGroup({ group: comment });
+                    flag.skipFixing = true;
+                    return;
+                }
+
                 const doubleSquare = elem.group.find((v) => v.type === "DoubleSquareBracket");
                 if (doubleSquare !== undefined) {
                     const foundGroup = elem.group.find((v) => v.type === "SingleSquareBracket");
@@ -618,7 +719,7 @@ export class NamuMark {
                     if (pipeIndex !== -1) {
                         sliced.slice(0, pipeIndex).forEach(v => v.ignore = true);
                         const pipeHolder = sliced[pipeIndex];
-                        console.log("double")
+                        // console.log("double")
                         sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
                     } else {
                         sliced.forEach(v => v.ignore = true);
@@ -739,7 +840,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
-                    console.log('heading')
+                    // console.log('heading')
                     sliced.forEach(v => v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start))
 
                     return;
@@ -752,14 +853,11 @@ export class NamuMark {
                         flag.skipFixing = true;
                         return;
                     }
-                    const range = mathtag.elems.map((v) => v.range);
-                    this.holderArray.forEach((holder) => {
-                        // mathtag의 regex는 tableargument의 regex와 비슷함
-                        const filtered = range.filter((v) => holder.range.isContainedIn(v) && !holder.range.isSame(v));
-                        if (filtered.length !== 0) {
-                            holder.ignore = true;
-                        }
-                    });
+                    const ranges = mathtag.elems.map((v) => v.range);
+                    ranges.forEach((range) => {
+                        const filtered =this.holderArray.filter(v => v.type === "TableArgumentOpen" || v.type === "TableArgumentClose")
+                        filtered.filter(v => v.range.isContainedIn(range)).forEach(v => v.ignore = true);
+                    })
                     const start = this.holderArray.findIndex((v) => v.uuid === mathtag.elems[0].uuid);
                     const end = this.holderArray.findIndex((v) => v.uuid === mathtag.elems[1].uuid);
                     const sliced = this.holderArray
@@ -785,19 +883,10 @@ export class NamuMark {
                     flag.skipFixing = true;
                     return;
                 }
-
-                const comment = elem.group.find((v) => v.type === "Comment");
-                if (comment !== undefined) {
-                    comment.elems.forEach((v) => (v.ignore = true));
-                    this.removeGroup({ group: comment });
-                    flag.skipFixing = true;
-                    return;
-                }
             }
             for (let idx = 0; idx < this.holderArray.length; idx++) {
-                const elem = this.holderArray[idx];
                 flag.skipFixing = false;
-
+                
                 this.holderArray = this.holderArray.filter((v) => {
                     if (v.ignore) {
                         v.group.forEach((group) => this.removeGroup({ group }));
@@ -805,11 +894,12 @@ export class NamuMark {
                     }
                     return true;
                 });
-
+                
+                const elem = this.holderArray[idx];
                 if (elem.fixed) {
                     continue;
                 }
-
+                
                 mainGrouping(elem, idx);
 
                 if (!flag.skipFixing) {
@@ -826,8 +916,6 @@ export class NamuMark {
         };
         const secondGrouping = () => {
             for (let idx = 0; idx < this.holderArray.length; idx++) {
-                const elem = this.holderArray[idx];
-
                 this.holderArray = this.holderArray.filter((v) => {
                     if (v.ignore) {
                         v.group.forEach((group) => this.removeGroup({ group }));
@@ -835,7 +923,8 @@ export class NamuMark {
                     }
                     return true;
                 });
-
+                
+                const elem = this.holderArray[idx];
                 if (elem.fixed) {
                     continue;
                 }
@@ -853,7 +942,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
-                    console.log('footnote')
+                    // console.log('footnote')
                     sliced.forEach((v) => (v.availableRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start)));
                 }
 
@@ -873,8 +962,6 @@ export class NamuMark {
         };
         const thirdGrouping = () => {
             for (let idx = 0; idx < this.holderArray.length; idx++) {
-                const elem = this.holderArray[idx];
-
                 this.holderArray = this.holderArray.filter((v) => {
                     if (v.ignore) {
                         v.group.forEach((group) => this.removeGroup({ group }));
@@ -882,7 +969,8 @@ export class NamuMark {
                     }
                     return true;
                 });
-
+                
+                const elem = this.holderArray[idx];
                 if (elem.fixed) {
                     continue;
                 }
@@ -915,7 +1003,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
-                    console.log("deco")
+                    // console.log("deco")
                     sliced.forEach((v) => {
                         if (v.group.filter((v) => groupTokens.includes(v.type)).length !== 0) {
                             v.ignore = true;
@@ -932,12 +1020,69 @@ export class NamuMark {
         };
 
         const fourthMappedProcessor: ProcessorType = {
-            Pipe: [],
-            TableArgumentOpen: [],
-            TableArgumentClose: []
+            Pipe: [processTablePipe],
+            Newline: [processTableNewline],
+            TableArgumentOpen: [processTableArgumentOpen],
+            TableArgumentClose: [processTableArgumentClose]
         }
         const fourthGrouping = () => {
-            
+            for (const elem of Object.values(tableArray)) {
+                if (elem.data.length === 0) {
+                    continue;
+                }
+                for (const value of elem.data) {
+                    if (value.length === 0) {
+                        continue;
+                    }
+
+                    this.pushGroup({ group: new Group("TableRow"), elems: [ ...value.filter(v => v.group.find(v => v.type === "TableRow") === undefined) ] })
+
+                    const last = value.findLast(v => v.type === "Pipe")
+                    if (last === undefined) {
+                        continue;
+                    }
+
+                    let substrText = "";
+                    if (last.availableRange.end === -999) {
+                        substrText = this.wikiText.substring(last.range.start, last.eolRange.end - 1);
+                    } else {
+                        substrText = this.wikiText.substring(last.range.start, last.availableRange.end)
+                    }
+
+                    if (substrText !== "|") {
+                        const foundGroup = last.group.find(v => v.type === "TableRow") as Group
+                        const argumentGroups: Group[] = []
+                        foundGroup.elems.forEach(v => {
+                            const argumentGroup = v.group.find(v => v.type === "TableArgument")
+                            if (argumentGroup !== undefined) {
+                                argumentGroups.push(argumentGroup)
+                            }
+                        })
+                        argumentGroups.forEach(group => this.removeGroup({ group }))
+                        this.removeGroup({ group: foundGroup })
+                    }
+
+                    this.pushGroup({ group: new Group("Table"), elems: [...value.filter(v => v.group.find(v => v.type === "TableRow") !== undefined )] })
+                }
+            }
+
+            // 마지막이라서 grouping 할 필요 없음
+            // for (let idx = 0; idx < this.holderArray.length; idx++) {
+            //     this.holderArray = this.holderArray.filter((v) => {
+            //         if (v.ignore) {
+            //             v.group.forEach((group) => this.removeGroup({ group }));
+            //             return false;
+            //         }
+            //         return true;
+            //     });
+                
+            //     const elem = this.holderArray[idx];
+            //     if (elem.fixed) {
+            //         continue;
+            //     }
+
+                
+            // }
         }
 
         const processorTuple: [ProcessorType, () => void][] = [
@@ -974,15 +1119,15 @@ export class NamuMark {
 
         // console.log(this.holderArray)
         // console.log(util.inspect(this.groupArray, false, null, true))
-        console.log(util.inspect(this.holderArray, false, 3, true));
     }
-
+    
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
             this.fillEolHolder();
             this.collectHolderElem();
             this.doParsing();
+            console.log(util.inspect(this.holderArray, false, 3, true));
         }
     }
 }
