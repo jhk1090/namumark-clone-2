@@ -169,6 +169,7 @@ export class NamuMark {
             Carot: [],
             Comma: [],
         };
+        const tableArray: {[k: string]: {rowStartIndex: number; argumentHolder: HolderElem | null; isTableEnd: boolean; data: HolderElem[][];}} = {};
 
         interface ProcessorProps {
             idx: number;
@@ -568,7 +569,7 @@ export class NamuMark {
                 }
             }
         };
-        const tableArray: {[k: string]: {rowStartIndex: number; argumentHolder: HolderElem | null; verifier: HolderElem | null; data: HolderElem[][];}} = {};
+        
         const processTablePipe = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
             const next = this.holderArray[props.idx + 1];
@@ -589,15 +590,15 @@ export class NamuMark {
 
             if (currentTable === undefined) {
                 if (adjNext !== "\n") {
-                    tableArray[elem.availableRange.toString()] = {rowStartIndex: 0, data: [[...adjPipe]], verifier: null, argumentHolder: null}
+                    tableArray[elem.availableRange.toString()] = {rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
                 }
                 props.setIdx(props.idx + adjPipe.length - 1);
                 return;
             }
 
-            if (currentTable.verifier !== null) {
+            if (currentTable.isTableEnd) {
                 tableArray[elem.availableRange.toString()].rowStartIndex = currentTable.data[0].length;
-                currentTable.verifier = null;
+                currentTable.isTableEnd = false;
             }
 
             tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
@@ -616,15 +617,14 @@ export class NamuMark {
                 return;
             }
 
-            const verifier = currentTable.verifier
-            if (verifier !== null) {
-                tableArray[elem.availableRange.toString()] = { data: [[], ...currentTable.data], rowStartIndex: 0, verifier: null, argumentHolder: null }
+            if (currentTable.isTableEnd) {
+                tableArray[elem.availableRange.toString()] = { data: [[], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
                 return;
             }
 
             if (prev.type === "Pipe" && prev.range.isAdjacent(elem.range)) {
                 this.pushGroup({group: new Group("TableRow"), elems: [ ...currentTable.data[0].slice(currentTable.rowStartIndex) ]})
-                tableArray[elem.availableRange.toString()].verifier = elem;
+                tableArray[elem.availableRange.toString()].isTableEnd = true;
                 return;
             }
         }
@@ -1043,6 +1043,7 @@ export class NamuMark {
                     }
 
                     let substrText = "";
+                    // global
                     if (last.availableRange.end === -999) {
                         substrText = this.wikiText.substring(last.range.start, last.eolRange.end - 1);
                     } else {
@@ -1067,22 +1068,6 @@ export class NamuMark {
             }
 
             // 마지막이라서 grouping 할 필요 없음
-            // for (let idx = 0; idx < this.holderArray.length; idx++) {
-            //     this.holderArray = this.holderArray.filter((v) => {
-            //         if (v.ignore) {
-            //             v.group.forEach((group) => this.removeGroup({ group }));
-            //             return false;
-            //         }
-            //         return true;
-            //     });
-                
-            //     const elem = this.holderArray[idx];
-            //     if (elem.fixed) {
-            //         continue;
-            //     }
-
-                
-            // }
         }
 
         const processorTuple: [ProcessorType, () => void][] = [
