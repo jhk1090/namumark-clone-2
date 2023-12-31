@@ -10,49 +10,21 @@
  * [processorSquareBracket](./docs/processorSquareBracket.md) - 대괄호 문법을 처리합니다.
  * [processorHeading](./docs/processorHeading.md) - 문단 문법을 처리합니다.
 
-
-
-```
-[[date]ㅁㄴㅇㄹ[[ㅁㄴㅇㄹ]]
-```
-
-[[ (할당)
-
-] (max = 1)
-
-[[ (할당)
-
-]] (max = 2)
+### indent 아이디어
 
 ```
-[[date]ㅁ]]ㄴㅇㄹ[[ㅁㄴㅇㄹ]]
+;는 indent
+
+;;{{{
+;{{{text1
+;;text2}}}
+}}}
 ```
 
-[[ (할당)
+{{{ }}} bracket은 indent = 2;
+text1은 indent = 1이지만, bracket의 영향으로 indent = 3;
+text2는 indent = 2이지만, bracket의 영향으로 indent = 4;
 
-] (max = 1)
 
-]] (max = 2)
-
-[[ (할당)
-
-]] (max = 2)
-
-```
-[[][date]
-```
-
-[[ ( char = [, max = 0, index = 0 )
-] ( length > max -> max = 1 ) ( queue[1].group = singleGroup )
-[ ( char = [, max = 0, index = 1 )
-] ( length == max (x) )
-
-```
- * asdf
-  * asdf
-  <- space(2)
-  * asdf
- <- space(1)
- * asdf
-```
+eolHolderArray = [ Indent, Elem, Elem, Elem, Newline ]
 

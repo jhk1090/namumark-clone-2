@@ -118,12 +118,31 @@ export class ParenthesisElem extends UnableChild {
 
 export type GroupType = "" | "Comment" | "Content" | "TripleBracket" | "TripleBracketContent" | "SquareBracket" | "SingleSquareBracket" | "DoubleSquareBracket" | "Heading" | "MathTag" | "Indent" | "List" | "Cite" | "Footnote" | "DecoDoubleQuote" | "DecoTripleQuote" | "DecoUnderbar" | "DecoTilde" | "DecoCarot" | "DecoComma" | "DecoHyphen" | "Table" | "TableRow" | "TableArgument"
 
-export class Group {
+type GroupPropertyType<Type> = Type extends "SingleSquareBracket"
+    ? GroupPropertySingleSquareBracketType
+    : Type extends "TripleBracket"
+    ? GroupPropertyTripleBracketType
+    : Type extends "Heading"
+    ? GroupPropertyHeadingType
+    : { [k: string]: any };
+export type GroupPropertySingleSquareBracketNameType = "clearfix" | "date" | "datetime" | "목차" | "tableofcontents" | "각주" | "footnote" | "br" | "pagecount" | "anchor" | "age" | "dday" | "youtube" | "kakaotv" | "nicovideo" | "vimeo" | "navertv" | "pagecount" | "math" | "include"
+type GroupPropertySingleSquareBracketType = { name: GroupPropertySingleSquareBracketNameType; }
+type GroupPropertyTripleBracketType = { type: "Raw" | "Sizing" | "TextColor" | "Html" | "Syntax" | "Wiki" }
+type GroupPropertyHeadingType = { level: number; isHidden: boolean; }
+
+export class BaseGroup {
     uuid: string = uuidv4();
     elems: HolderElem[] = [];
     type: GroupType = "";
-    constructor(type: GroupType) {
+    constructor() {}
+}
+
+export class Group<Type extends GroupType> extends BaseGroup {
+    property?: GroupPropertyType<Type>;
+    constructor(type: Type, property?: GroupPropertyType<Type>) {
+        super();
         this.type = type;
+        this.property = property;
     }
 }
 
@@ -133,7 +152,7 @@ export class HolderElem {
     range: Range = new Range(0, 1);
     eolRange: Range = new Range(0, 1);
     availableRange: Range = new Range(-1000, -999); // 기본 global 값 Range(-1000, -999)
-    group: Group[] = [];
+    group: BaseGroup[] = [];
     type: HolderType = "";
     uuid: string = uuidv4();
     fixed: boolean = false;
