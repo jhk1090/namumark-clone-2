@@ -102,6 +102,7 @@ export class NamuMark {
         const tripleBracketOpen: offsetNone = [/\{\{\{/g, "TripleBracketOpen"];
         const tripleBracketClose: offsetNone = [/\}\}\}/g, "TripleBracketClose"];
         const indent: offsetOnlyStart = [/\n( ){1,}/g, "Indent", 1];
+        const citeIndent: offsetOnlyStart = [/\>( ){1,}/g, "CiteIndent", 1];
         const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1];
         const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1];
         const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1];
@@ -131,6 +132,7 @@ export class NamuMark {
             tripleBracketOpen,
             tripleBracketClose,
             indent,
+            citeIndent,
             unorderedList,
             orderedList,
             cite,
