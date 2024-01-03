@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType } from "./elem";
+import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, regexType } from "./elem";
 const util = require("node:util");
 
 export class NamuMark {
@@ -57,14 +57,23 @@ export class NamuMark {
         }
     }
 
-    evaluateHolder(arr: [RegExp, HolderType, number?, number?]) {
-        let [regex, type, offsetStart, offsetEnd] = arr;
-        offsetStart = offsetStart ?? 0;
-        offsetEnd = offsetEnd ?? 0;
+    evaluateHolder(arr: regexType) {
+        let [regex, type, offset] = arr;
+        let offsetStart = offset?.start ?? 0;
+        let offsetEnd = offset?.end ?? 0;
+        let offsetUseGroupStart = offset?.useGroupStart
+        let offsetUseGroupEnd = offset?.useGroupEnd
 
         let match;
 
         while ((match = regex.exec(this.wikiText)) !== null) {
+            if (offsetUseGroupStart !== undefined) {
+                offsetStart = match.groups?.[offsetUseGroupStart].length as number;
+            }
+            if (offsetUseGroupEnd !== undefined) {
+                offsetEnd = match.groups?.[offsetUseGroupEnd].length as number;
+            }
+            
             let target;
             let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd);
             for (const eol of this.eolHolderArray) {
@@ -83,41 +92,40 @@ export class NamuMark {
     }
 
     collectHolderElem() {
-        type offset = number | undefined;
-        type offsetNone = [RegExp, HolderType];
-        type offsetOnlyStart = [RegExp, HolderType, offset];
-        type offsetBoth = [RegExp, HolderType, offset, offset];
         // linkpipe, tablecell
-        const pipe: offsetNone = [/\|/g, "Pipe"];
-        const comment: offsetOnlyStart = [/\n##/g, "Comment", 1];
+        const pipe: regexType = [/\|/g, "Pipe"];
+        const comment: regexType = [/\n##/g, "Comment", { start: 1 }];
         // linkOpen, macroOpen
-        const squareBracketOpen: offsetNone = [/\[/g, "SquareBracketOpen"];
-        const footnoteOpen: offsetOnlyStart = [/\[\*/g, "FootnoteOpen", 1];
+        const squareBracketOpen: regexType = [/\[/g, "SquareBracketOpen"];
+        const footnoteOpen: regexType = [/\[\*/g, "FootnoteOpen", { start: 1 }];
         // footnoteclose, linkclose, macroclose
-        const squareBracketClose: offsetNone = [/\]/g, "SquareBracketClose"];
-        const macroArgumentOpen: offsetNone = [/\(/g, "ParenthesisOpen"];
-        const macroArgumentClose: offsetNone = [/\)/g, "ParenthesisClose"];
-        const headingOpen: offsetOnlyStart = [/\n={1,6}(#?) /g, "HeadingOpen", 1];
-        const headingClose: offsetBoth = [/ (#?)={1,6}\n/g, "HeadingClose", undefined, -1];
-        const tripleBracketOpen: offsetNone = [/\{\{\{/g, "TripleBracketOpen"];
-        const tripleBracketClose: offsetNone = [/\}\}\}/g, "TripleBracketClose"];
-        const indent: offsetOnlyStart = [/\n( ){1,}/g, "Indent", 1];
-        const citeIndent: offsetOnlyStart = [/\>( ){1,}/g, "CiteIndent", 1];
-        const unorderedList: offsetOnlyStart = [/\n( ){1,}\*/g, "UnorderedList", 1];
-        const orderedList: offsetOnlyStart = [/\n( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", 1];
-        const cite: offsetOnlyStart = [/\n>{1,}/g, "Cite", 1];
-        const tableArgumentOpen: offsetOnlyStart = [/(\||\>)\</g, "TableArgumentOpen", 1];
-        const tableArgumentClose: offsetNone = [/\>/g, "TableArgumentClose"];
-        const mathTagOpen: offsetNone = [/\<math\>/g, "MathTagOpen"];
-        const mathTagClose: offsetNone = [/\<\/math\>/g, "MathTagClose"];
-        const quote: offsetNone = [/\'/g, "Quote"];
-        const underbar: offsetNone = [/\_/g, "Underbar"];
-        const tilde: offsetNone = [/\~/g, "Tilde"];
-        const carot: offsetNone = [/\^/g, "Carot"];
-        const comma: offsetNone = [/\,/g, "Comma"];
-        const hyphen: offsetNone = [/\-/g, "Hyphen"];
-        const escape: offsetNone = [/\\/g, "Escape"];
-        const newline: offsetNone = [/[\n]/g, "Newline"];
+        const squareBracketClose: regexType = [/\]/g, "SquareBracketClose"];
+        const macroArgumentOpen: regexType = [/\(/g, "ParenthesisOpen"];
+        const macroArgumentClose: regexType = [/\)/g, "ParenthesisClose"];
+        const headingOpen: regexType = [/\n={1,6}(#?) /g, "HeadingOpen", { start: 1 }];
+        const headingClose: regexType = [/ (#?)={1,6}\n/g, "HeadingClose", { end: -1 }];
+        const tripleBracketOpen: regexType = [/\{\{\{/g, "TripleBracketOpen"];
+        const tripleBracketClose: regexType = [/\}\}\}/g, "TripleBracketClose"];
+        const indent: regexType = [/\n( ){1,}/g, "Indent", { start: 1 }];
+        const citeIndent: regexType = [/\>( ){1,}/g, "CiteIndent", { start: 1 }];
+        const listIndent: regexType = [/(?<head>((\>|( ))(\*|(1|a|A|i|I)\.(\#\d)?)))( ){1,}/g, "ListIndent", { useGroupStart: "head" }]
+        const unorderedList: regexType = [/(?<head>(\>|( )))\*/g, "UnorderedList", { useGroupStart: "head" }];
+        const orderedList: regexType = [/(?<head>(\>|( )))(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", { useGroupStart: "head" }];
+        const citeUnorderedList: regexType = [/(\>)( ){1,}\*/g, "CiteUnorderedList", { start: 1 }];
+        const citeOrderedList: regexType = [/(\>)( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "CiteOrderedList", { start: 1 }];
+        const cite: regexType = [/(?<head>\n|\>|( )|((\>|( ))(\*|(1|a|A|i|I)\.(\#\d)?)))\>( ){0,}/g, "Cite", { useGroupStart: "head" }];
+        const tableArgumentOpen: regexType = [/(\||\>)\</g, "TableArgumentOpen", { start: 1 }];
+        const tableArgumentClose: regexType = [/(\w{1})\>/g, "TableArgumentClose", { start: 1 }];
+        const mathTagOpen: regexType = [/\<math\>/g, "MathTagOpen"];
+        const mathTagClose: regexType = [/\<\/math\>/g, "MathTagClose"];
+        const quote: regexType = [/\'/g, "Quote"];
+        const underbar: regexType = [/\_/g, "Underbar"];
+        const tilde: regexType = [/\~/g, "Tilde"];
+        const carot: regexType = [/\^/g, "Carot"];
+        const comma: regexType = [/\,/g, "Comma"];
+        const hyphen: regexType = [/\-/g, "Hyphen"];
+        const escape: regexType = [/\\/g, "Escape"];
+        const newline: regexType = [/[\n]/g, "Newline"];
 
         const evaluators = [
             pipe,
@@ -133,8 +141,11 @@ export class NamuMark {
             tripleBracketClose,
             indent,
             citeIndent,
+            listIndent,
             unorderedList,
             orderedList,
+            citeUnorderedList,
+            citeOrderedList,
             cite,
             tableArgumentOpen,
             tableArgumentClose,
@@ -162,7 +173,13 @@ export class NamuMark {
         let squareBracketArray: { value: HolderElem[]; max: number }[] = [];
         let headingOpenElement: HolderElem | undefined = undefined;
         let mathOpenElement: HolderElem | undefined = undefined;
+        const listArray: { [k: "global" | string]: { precedeIndent: number; data: HolderElem[][] } } = {
+            "global": { precedeIndent: 0, data: [] }
+        };
+        const citeArray: { [k: string]: { precedeIndent: number; data: HolderElem[] }} = {};
+
         const footnoteQueue: [HolderElem, HolderElem][] = [];
+
         const decoArray: { [k in "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma"]: HolderElem[] } = {
             Quote: [],
             Underbar: [],
@@ -171,7 +188,9 @@ export class NamuMark {
             Carot: [],
             Comma: [],
         };
-        const tableArray: {[k: string]: {rowStartIndex: number; argumentHolder: HolderElem | null; isTableEnd: boolean; data: HolderElem[][];}} = {};
+
+        type indentType = { count: number; type: HolderType }
+        const tableArray: {[k: string]: {indentSequence: indentType[] | null; rowStartIndex: number; argumentHolder: HolderElem | null; isTableEnd: boolean; data: HolderElem[][];}} = {};
 
         interface ProcessorProps {
             idx: number;
@@ -447,6 +466,23 @@ export class NamuMark {
             this.pushGroup({ group: new Group("MathTag"), elems: [mathOpenElement, elem] });
             mathOpenElement = undefined;
         };
+        const processCite = (props: ProcessorProps) => {
+            const elem = this.holderArray[props.idx];
+            const precedeEndlineIndex = this.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
+            const endlineIndex = this.holderArray.slice(props.idx).findIndex(v => v.type === "Newline") + props.idx;
+            const elems = this.holderArray.slice(props.idx, endlineIndex)
+
+            const indents = this.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent");
+            const accumulatedLength = indents.reduce((acc, cur) => { return acc + (cur.range.end - cur.range.start) }, 0)
+
+            if (citeArray[elem.uuid] === undefined) {
+                citeArray[elem.uuid] = { precedeIndent: accumulatedLength, data: [elem] }
+            } else {
+
+            }
+            
+            this.pushGroup({ group: new Group("SingleCite"), elems });
+        }
         const processFootnoteOpen = (props: ProcessorProps) => {
             const elem = this.holderArray[props.idx];
             const prev = this.holderArray[props.idx - 1];
@@ -487,6 +523,7 @@ export class NamuMark {
             const elemType = elem.type as "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma";
 
             const adjDecoration = [elem];
+
             let lastRange: Range = elem.range;
             let decoCount = 1;
             const decoCountMax = elemType === "Quote" ? 3 : 2;
@@ -568,20 +605,112 @@ export class NamuMark {
                 if (this.wikiText.substring(elem.eolRange.start, elem.range.end).trim() !== "|") {
                     props.setIdx(props.idx + adjPipe.length - 1);
                     return;
-                }
+                }              
             }
 
             if (currentTable === undefined) {
                 if (adjNext !== "\n") {
-                    tableArray[elem.availableRange.toString()] = {rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
+                    const precedeEndlineIndex = this.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
+                    const indents = this.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+                    const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
+
+                    tableArray[elem.availableRange.toString()] = {indentSequence, rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
                 }
                 props.setIdx(props.idx + adjPipe.length - 1);
                 return;
             }
 
+            if (currentTable.data[0].length === 0) {
+                const precedeEndlineIndex = this.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
+                const indents = this.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+                const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
+
+                tableArray[elem.availableRange.toString()].indentSequence = indentSequence;
+            }
+
             if (currentTable.isTableEnd) {
-                tableArray[elem.availableRange.toString()].rowStartIndex = currentTable.data[0].length;
-                currentTable.isTableEnd = false;
+                const precedeEndlineIndex = this.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
+                const indents = this.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+                const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
+
+                const isSequenceEqual = (x: {count: number; type: HolderType}[], y: {count: number; type: HolderType}[]) => {
+                    if (x.length === 0 && y.length === 0) {
+                        return true;
+                    }
+
+                    if ((x.length === 0 && y.length > 0) || (x.length > 0 && y.length === 0)) {
+                        return false;
+                    }
+
+                    if (x.filter(v => v.type === "ListIndent").length > 0 && y.filter(v => v.type === "ListIndent").length > 0) {
+                        return false;
+                    }
+
+                    x = x.map(v => v.type === "ListIndent" ? { count: v.count - 1, type: v.type } : v )
+                    y = y.map(v => v.type === "ListIndent" ? { count: v.count - 1, type: v.type } : v )
+                    
+                    if (x.reduce((acc, cur) => acc + cur.count, 0) !== y.reduce((acc, cur) => acc + cur.count, 0)) {
+                        return false;
+                    }
+                    
+                    let xidx = 0;
+                    let xcount = x[xidx].count;
+                    let yidx = 0;
+                    let ycount = y[yidx].count;
+
+                    while (true) {
+                        if (x[xidx].type !== "ListIndent" && y[yidx].type !== "ListIndent" && x[xidx].type !== y[yidx].type) {
+                            return false;
+                        }
+                        if (xcount < ycount) {
+                            xcount = 0;
+                            ycount = ycount - xcount
+                            xidx++;
+                            if (x[xidx] === undefined) {
+                                break;
+                            }
+                            xcount = x[xidx].count;
+                            continue;
+                        }
+                        if (xcount > ycount) {
+                            xcount = xcount - ycount
+                            ycount = 0;
+                            yidx++;
+                            if (y[yidx] === undefined) {
+                                break;
+                            }
+                            ycount = y[yidx].count;
+                            continue;
+                        }
+                        if (xcount === ycount) {
+                            xidx++;
+                            yidx++;
+                            xcount = 0;
+                            ycount = 0;
+                            if (x[xidx] === undefined || y[yidx] === undefined) {
+                                break;
+                            }
+                            xcount = x[xidx].count;
+                            ycount = y[yidx].count;
+                            continue;
+                        }
+                    }
+
+                    if (xcount === 0 && ycount === 0) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+
+                if (isSequenceEqual([...indentSequence], [...(currentTable.indentSequence ?? [])])) {
+                    tableArray[elem.availableRange.toString()].rowStartIndex = currentTable.data[0].length;
+                    currentTable.isTableEnd = false;
+                } else {
+                    tableArray[elem.availableRange.toString()] = { indentSequence, data: [[...adjPipe], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
+                    props.setIdx(props.idx + adjPipe.length - 1);
+                    return;
+                }
             }
 
             tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
@@ -601,7 +730,7 @@ export class NamuMark {
             }
 
             if (currentTable.isTableEnd) {
-                tableArray[elem.availableRange.toString()] = { data: [[], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
+                tableArray[elem.availableRange.toString()] = { indentSequence: null, data: [[], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
                 return;
             }
 
@@ -1101,7 +1230,7 @@ export class NamuMark {
             this.fillEolHolder();
             this.collectHolderElem();
             this.doParsing();
-            console.log(util.inspect(this.holderArray, false, 4, true));
+            console.log(util.inspect(this.holderArray, false, 3, true));
         }
     }
 }

@@ -1,6 +1,14 @@
 import { Range } from "./utils";
 import { v4 as uuidv4 } from "uuid";
 
+interface IOffset {
+    start?: number;
+    end?: number;
+    useGroupStart?: string;
+    useGroupEnd?: string;
+}
+export type regexType = [RegExp, HolderType, IOffset?]
+
 export abstract class Elem {
     uuid: string = uuidv4();
     range: Range = new Range(0, 1);
@@ -116,7 +124,7 @@ export class ParenthesisElem extends UnableChild {
     }
 }
 
-export type GroupType = "" | "Comment" | "Content" | "TripleBracket" | "TripleBracketContent" | "SquareBracket" | "SingleSquareBracket" | "DoubleSquareBracket" | "Heading" | "MathTag" | "Indent" | "List" | "Cite" | "Footnote" | "DecoDoubleQuote" | "DecoTripleQuote" | "DecoUnderbar" | "DecoTilde" | "DecoCarot" | "DecoComma" | "DecoHyphen" | "Table" | "TableRow" | "TableArgument"
+export type GroupType = "" | "Comment" | "Content" | "TripleBracket" | "TripleBracketContent" | "SquareBracket" | "SingleSquareBracket" | "DoubleSquareBracket" | "Heading" | "MathTag" | "Indent" | "List" | "SingleCite" | "Cite" | "Footnote" | "DecoDoubleQuote" | "DecoTripleQuote" | "DecoUnderbar" | "DecoTilde" | "DecoCarot" | "DecoComma" | "DecoHyphen" | "Table" | "TableRow" | "TableArgument"
 
 type GroupPropertyType<Type> = Type extends "SingleSquareBracket"
     ? GroupPropertySingleSquareBracketType
@@ -146,7 +154,7 @@ export class Group<Type extends GroupType> extends BaseGroup {
     }
 }
 
-export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "Indent" | "CiteIndent" | "UnorderedList" | "OrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
+export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "Indent" | "CiteIndent" | "ListIndent" | "UnorderedList" | "OrderedList" | "CiteUnorderedList" | "CiteOrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
 
 export class HolderElem {
     range: Range = new Range(0, 1);
