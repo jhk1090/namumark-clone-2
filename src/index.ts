@@ -713,7 +713,15 @@ export class NamuMark {
                 }
             }
 
-            tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
+            const start = this.holderArray.findIndex(v => v.uuid === currentTable.data[0].at(-1)?.uuid);
+            const end = this.holderArray.findIndex(v => v.uuid === adjPipe[0].uuid);
+            const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1);
+            const filteredSliced = sliced.filter(v => v.group.find(v => v.type === "Heading") !== undefined);
+            if (filteredSliced.length === 0) {
+                tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
+            } else {
+                tableArray[elem.availableRange.toString()].data[0].splice(-2, 2, ...adjPipe)
+            }
             props.setIdx(props.idx + adjPipe.length - 1);
             return;
         }    
@@ -829,10 +837,25 @@ export class NamuMark {
                     const pipeIndex = sliced.findIndex((v) => v.type === "Pipe");
                     
                     if (pipeIndex !== -1) {
-                        sliced.slice(0, pipeIndex).forEach(v => v.ignore = true);
-                        const pipeHolder = sliced[pipeIndex];
-                        // console.log("double")
-                        sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
+                        const filteredSliced = sliced.filter(v => {
+                            const heading = v.group.find(v => v.type === "Heading")
+                            if (heading === undefined) {
+                                return false
+                            } else {
+                                if (heading.elems.length !== 2) {
+                                    return false
+                                }
+                                return true
+                            }
+                        })
+                        if (filteredSliced.length === 0) {
+                            sliced.slice(0, pipeIndex).forEach(v => v.ignore = true);
+                            const pipeHolder = sliced[pipeIndex];
+                            // console.log("double")
+                            sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
+                        } else {
+                            flag.skipFixing = true;
+                        }
                     } else {
                         sliced.forEach(v => v.ignore = true);
                     }
@@ -853,9 +876,24 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
-                    sliced.forEach((v) => {
-                        if (v.type !== "ParenthesisOpen" && v.type !== "ParenthesisClose") v.ignore = true;
-                    });
+                    const filteredSliced = sliced.filter(v => {
+                        const heading = v.group.find(v => v.type === "Heading")
+                        if (heading === undefined) {
+                            return false
+                        } else {
+                            if (heading.elems.length !== 2) {
+                                return false
+                            }
+                            return true
+                        }
+                    })
+                    if (filteredSliced.length === 0) {
+                        sliced.forEach((v) => {
+                            if (v.type !== "ParenthesisOpen" && v.type !== "ParenthesisClose") v.ignore = true;
+                        });
+                    } else {
+                        flag.skipFixing = true;
+                    }
                     return;
                 }
 
@@ -878,7 +916,6 @@ export class NamuMark {
 
                     const content = this.wikiText.substring(triple.elems[0].range.end)
                     let match: RegExpExecArray | null;
-                    let detected = false;
                     let ignoredRange = new Range(0, 1);
                     const doMatchIgnoring = () => {
                         if (ignoredRange.end === triple.elems[1].range.start) {
@@ -908,40 +945,64 @@ export class NamuMark {
                             .toSpliced(-1, 1);
                         sliced.forEach((v) => (v.ignore = true));
                     }
-                    if (!detected && (match = sizingRegex.exec(content)) !== null) {
-                        ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + sizingRegex.lastIndex)
-                        doMatchIgnoring();
-                        triple.property = {type: "Sizing"}
-                        detected = true;
+
+                    const start = this.holderArray.findIndex(v => v.uuid === triple.elems[0].uuid);
+                    const end = this.holderArray.findIndex(v => v.uuid === triple.elems[1].uuid);
+                    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1);
+                    const filteredSliced = sliced.filter(v => {
+                        const heading = v.group.find(v => v.type === "Heading")
+                        if (heading === undefined) {
+                            return false
+                        } else {
+                            if (heading.elems.length !== 2) {
+                                return false
+                            }
+                            return true
+                        }
+                    })
+                    if ((match = sizingRegex.exec(content)) !== null) {
+                        if (filteredSliced.length === 0) {
+                            ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + sizingRegex.lastIndex)
+                            doMatchIgnoring();
+                            triple.property = {type: "Sizing"}
+                        } else {
+                            flag.skipFixing = true;
+                        }
+                        return;
                     }
-                    if (!detected && (match = wikiRegex.exec(content)) !== null) {
-                        ignoredRange = new Range(triple.elems[0].range.end, elem.eolRange.end)
-                        doMatchIgnoring();
-                        triple.property = {type: "Wiki"}
-                        detected = true;
+                    if ((match = wikiRegex.exec(content)) !== null) {
+                        if (filteredSliced.length === 0) {
+                            ignoredRange = new Range(triple.elems[0].range.end, elem.eolRange.end)
+                            doMatchIgnoring();
+                            triple.property = {type: "Wiki"}
+                        } else {
+                            flag.skipFixing = true;
+                        }
+                        return;
                     }
-                    if (!detected && (match = htmlRegex.exec(content)) !== null) {
+                    if ((match = htmlRegex.exec(content)) !== null) {
                         doWholeIgnoring();
                         triple.property = {type: "Html"}
-                        detected = true;
+                        return;
                     }
-                    if (!detected && (match = textColorRegex.exec(content)) !== null) {
-                        ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + textColorRegex.lastIndex)
-                        doMatchIgnoring();
-                        triple.property = {type: "TextColor"}
-                        detected = true;
+                    if ((match = textColorRegex.exec(content)) !== null) {
+                        if (filteredSliced.length === 0) {
+                            ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + textColorRegex.lastIndex)
+                            doMatchIgnoring();
+                            triple.property = {type: "TextColor"}
+                        } else {
+                            flag.skipFixing = true;
+                        }
+                        return;
                     }
-                    if (!detected && (match = syntaxRegex.exec(content)) !== null) {
+                    if ((match = syntaxRegex.exec(content)) !== null) {
                         doWholeIgnoring();
                         triple.property = {type: "Syntax"}
-                        detected = true;
+                        return;
                     }
-                    if (!detected) {
-                        doWholeIgnoring();
-                        triple.property = {type: "Raw"}
-                        detected = true;
-                    }
-                    return;
+                    
+                    doWholeIgnoring();
+                    triple.property = {type: "Raw"}
                 }
 
                 const heading = elem.group.find((v) => v.type === "Heading");
@@ -954,6 +1015,13 @@ export class NamuMark {
 
                     const start = this.holderArray.findIndex((v) => v.uuid === heading.elems[0].uuid);
                     const end = this.holderArray.findIndex((v) => v.uuid === heading.elems[1].uuid);
+
+                    this.holderArray.slice(0, start).forEach(v => {
+                        if (v.fixed === false && v.group.length > 0) {
+                            v.ignore = true;
+                        }
+                    })
+
                     const sliced = this.holderArray
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
