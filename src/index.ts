@@ -609,13 +609,13 @@ export class NamuMark {
             }
 
             if (currentTable === undefined) {
-                if (adjNext !== "\n") {
-                    const precedeEndlineIndex = this.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-                    const indents = this.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
-                    const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
+                // if (adjNext !== "\n") {
+                const precedeEndlineIndex = this.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
+                const indents = this.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+                const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
-                    tableArray[elem.availableRange.toString()] = {indentSequence, rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
-                }
+                tableArray[elem.availableRange.toString()] = {indentSequence, rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
+                // }
                 props.setIdx(props.idx + adjPipe.length - 1);
                 return;
             }
@@ -734,7 +734,7 @@ export class NamuMark {
                 return;
             }
 
-            if (prev.type === "Pipe" && prev.range.isAdjacent(elem.range)) {
+            if (!(currentTable.data[0].slice(currentTable.rowStartIndex).length === 2 && currentTable.data[0].length === 2) && prev.type === "Pipe" && prev.range.isAdjacent(elem.range)) {
                 this.pushGroup({group: new Group("TableRow"), elems: [ ...currentTable.data[0].slice(currentTable.rowStartIndex) ]})
                 tableArray[elem.availableRange.toString()].isTableEnd = true;
                 return;
@@ -1149,7 +1149,7 @@ export class NamuMark {
                     continue;
                 }
                 for (const value of elem.data) {
-                    if (value.length === 0) {
+                    if (value.length === 0 || value.length === 2) {
                         continue;
                     }
 
