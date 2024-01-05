@@ -36,7 +36,7 @@ export const footnoteCloseProcessor = (mark: NamuMark, props: ProcessorProps) =>
         return;
     }
 
-    if (lastTuple[0].availableRange !== elem.availableRange) {
+    if (!lastTuple[0].availableRange.isSame(elem.availableRange)) {
         return;
     }
 

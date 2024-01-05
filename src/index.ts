@@ -227,7 +227,7 @@ export class NamuMark {
             });
         }
 
-        // console.log(util.inspect(this.holderArray, false, 3, true))
+        console.log(util.inspect(this.holderArray, false, 3, true))
         // console.log(util.inspect(decoArray, false, 3, true))
         // console.log(util.inspect(tableArray, false, 4, true))
     }

@@ -114,7 +114,7 @@ export const squareBracketCloseProcessor = (mark: NamuMark, props: ProcessorProp
         }
 
         // 같은 개행 줄에 있는지 여부
-        if (bracket.value[0].eolRange === adjBrackets[0].eolRange) {
+        if (bracket.value[0].eolRange.isSame(adjBrackets[0].eolRange)) {
             const group = new Group(bracket.value.length >= 2 && bracket.max >= 2 ? "DoubleSquareBracket" : "SingleSquareBracket");
             if (bracket.value.length >= 2 && bracket.max >= 2) {
                 // 링크 문법

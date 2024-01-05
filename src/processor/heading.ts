@@ -11,7 +11,7 @@ export const headingCloseProcessor = (mark: NamuMark, props: ProcessorProps) => 
     const headingOpenElement = mark.parserStore.headingOpenElement;
 
     const elem = mark.holderArray[props.idx];
-    if (headingOpenElement !== undefined && headingOpenElement.eolRange === elem.eolRange) {
+    if (headingOpenElement !== undefined && headingOpenElement.eolRange.isSame(elem.eolRange)) {
         const openRegex = /(?<level>={1,6})(?<isHidden>#?) /g;
         const closeRegex = / (?<isHidden>#?)(?<level>={1,6})/g;
         const openGroup = (
