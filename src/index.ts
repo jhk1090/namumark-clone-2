@@ -548,7 +548,7 @@ export class NamuMark {
             if (elemType !== "Quote") {
                 let referencedArray = decoArray[elemType];
 
-                if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange) || !(referencedArray[0].availableRange === elem.availableRange)) {
+                if (referencedArray.length === 0 || !(referencedArray[0].eolRange.isSame(elem.eolRange)) || !(referencedArray[0].availableRange.isSame(elem.availableRange))) {
                     decoArray[elemType] = [...adjDecoration];
                     props.setIdx(props.idx + adjDecoration.length - 1);
                     return;
@@ -561,7 +561,7 @@ export class NamuMark {
             } else {
                 let referencedArray = decoArray[elemType];
 
-                if (referencedArray.length === 0 || !referencedArray[0].eolRange.isSame(elem.eolRange) || !(referencedArray[0].availableRange === elem.availableRange)) {
+                if (referencedArray.length === 0 || !(referencedArray[0].eolRange.isSame(elem.eolRange)) || !(referencedArray[0].availableRange.isSame(elem.availableRange))) {
                     decoArray[elemType] = [...adjDecoration];
                     props.setIdx(props.idx + adjDecoration.length - 1);
                     return;
@@ -720,7 +720,15 @@ export class NamuMark {
             if (filteredSliced.length === 0) {
                 tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
             } else {
-                tableArray[elem.availableRange.toString()].data[0].splice(-2, 2, ...adjPipe)
+                // ||<asdf> ||
+                const lastPipeIndex = currentTable.data[0].findLastIndex(v => v.type === "Pipe") - 1
+                const found = currentTable.data[0].slice(lastPipeIndex).find(v => v.type === "TableArgumentOpen")
+                if (found !== undefined) {
+                    this.removeGroup({ group: found.group.find((v) => v.type === "TableArgument") as Group<"TableArgument"> });
+                }
+
+                tableArray[elem.availableRange.toString()].data[0] = currentTable.data[0].slice(0, lastPipeIndex)
+                tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
             }
             props.setIdx(props.idx + adjPipe.length - 1);
             return;
@@ -849,7 +857,7 @@ export class NamuMark {
                             }
                         })
                         if (filteredSliced.length === 0) {
-                            sliced.slice(0, pipeIndex).forEach(v => v.ignore = true);
+                            sliced.slice(0, pipeIndex).filter(v => v.type !== "Newline").forEach(v => v.ignore = true);
                             const pipeHolder = sliced[pipeIndex];
                             // console.log("double")
                             sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
@@ -857,7 +865,7 @@ export class NamuMark {
                             flag.skipFixing = true;
                         }
                     } else {
-                        sliced.forEach(v => v.ignore = true);
+                        sliced.filter(v => v.type !== "Newline").forEach(v => v.ignore = true);
                     }
 
                     return;
@@ -887,8 +895,9 @@ export class NamuMark {
                             return true
                         }
                     })
+
                     if (filteredSliced.length === 0) {
-                        sliced.forEach((v) => {
+                        sliced.filter(v => v.type !== "Newline").forEach((v) => {
                             if (v.type !== "ParenthesisOpen" && v.type !== "ParenthesisClose") v.ignore = true;
                         });
                     } else {
@@ -919,14 +928,14 @@ export class NamuMark {
                     let ignoredRange = new Range(0, 1);
                     const doMatchIgnoring = () => {
                         if (ignoredRange.end === triple.elems[1].range.start) {
-                            this.holderArray.forEach(v => {
+                            this.holderArray.filter(v => v.type !== "Newline").forEach(v => {
                                 if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
                                     v.ignore = true;
                                 }
                             })
                         } else {
                             const availableRange = new Range(ignoredRange.end, triple.elems[1].range.start);
-                            this.holderArray.forEach(v => {
+                            this.holderArray.filter(v => v.type !== "Newline").forEach(v => {
                                 if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
                                     v.ignore = true;
                                 }
@@ -943,7 +952,7 @@ export class NamuMark {
                             .slice(start, end + 1)
                             .toSpliced(0, 1)
                             .toSpliced(-1, 1);
-                        sliced.forEach((v) => (v.ignore = true));
+                        sliced.filter(v => v.type !== "Newline").forEach((v) => (v.ignore = true));
                     }
 
                     const start = this.holderArray.findIndex(v => v.uuid === triple.elems[0].uuid);
@@ -1016,7 +1025,7 @@ export class NamuMark {
                     const start = this.holderArray.findIndex((v) => v.uuid === heading.elems[0].uuid);
                     const end = this.holderArray.findIndex((v) => v.uuid === heading.elems[1].uuid);
 
-                    this.holderArray.slice(0, start).forEach(v => {
+                    this.holderArray.slice(0, start).filter(v => v.type !== "Newline").forEach(v => {
                         if (v.fixed === false && v.group.length > 0) {
                             v.ignore = true;
                         }
@@ -1050,7 +1059,7 @@ export class NamuMark {
                         .slice(start, end + 1)
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
-                    sliced.forEach((v) => (v.ignore = true));
+                    sliced.filter(v => v.type !== "Newline").forEach((v) => (v.ignore = true));
                     return;
                 }
 
@@ -1190,7 +1199,7 @@ export class NamuMark {
                         .toSpliced(0, 1)
                         .toSpliced(-1, 1);
                     // console.log("deco")
-                    sliced.forEach((v) => {
+                    sliced.filter(v => v.type !== "Newline").forEach((v) => {
                         if (v.group.filter((v) => groupTokens.includes(v.type)).length !== 0) {
                             v.ignore = true;
                         } else {
@@ -1233,7 +1242,11 @@ export class NamuMark {
                     if (last.availableRange.end === -999) {
                         substrText = this.wikiText.substring(last.range.start, last.eolRange.end - 1);
                     } else {
-                        substrText = this.wikiText.substring(last.range.start, last.availableRange.end)
+                        if (last.eolRange.end - 1 > last.availableRange.end) {
+                            substrText = this.wikiText.substring(last.range.start, last.availableRange.end)
+                        } else {
+                            substrText = this.wikiText.substring(last.range.start, last.eolRange.end - 1);
+                        }
                     }
 
                     if (substrText !== "|") {
@@ -1249,7 +1262,69 @@ export class NamuMark {
                         this.removeGroup({ group: foundGroup })
                     }
 
-                    this.pushGroup({ group: new Group("Table"), elems: [...value.filter(v => v.group.find(v => v.type === "TableRow") !== undefined )] })
+                    const filtered = value.filter(v => v.group.find(v => v.type === "TableRow") !== undefined )
+
+                    const mappedResult: HolderElem[][] = [];
+                    let current: HolderElem[] = [];
+                    let fulfilled = false;
+
+                    for (const element of filtered) {
+                        if (current.length >= 2) {
+                            fulfilled = true;
+                        }
+                        if (!fulfilled && element.type === "Pipe") {
+                            current.push(element)
+                            continue;
+                        }
+                        if (fulfilled && element.type === "Pipe") {
+                            mappedResult.push(current)
+                            fulfilled = false;
+                            current = [element];
+                            continue;
+                        }
+                        if (element.type === "TableArgumentOpen") {
+                            current.push(element)
+                            continue;
+                        }
+                        if (element.type === "TableArgumentClose") {
+                            current.push(element)
+                            continue;
+                        }
+                    }
+
+                    if (current.length >= 2) {
+                        mappedResult.push(current)
+                    }
+
+                    // console.log(util.inspect(mappedResult, false, 4, true))
+
+                    const availableRanges: Range[] = [];
+
+                    for (let i = 0; i < mappedResult.length; i++) {
+                        const cur = mappedResult[i];                   
+                        const next = mappedResult[i + 1];
+                        if (cur === undefined || next === undefined) {
+                            break;
+                        }
+                        const lastCur = cur[cur.length - 1].range.end
+                        const firstNext = next[0].range.start
+
+                        if (lastCur === firstNext) {
+                            continue;
+                        }
+
+                        availableRanges.push(new Range(lastCur, firstNext))
+                    }
+
+                    const allowedType: HolderType[] = ["Cite", "CiteIndent", "CiteOrderedList", "CiteUnorderedList", "Indent", "ListIndent", "OrderedList", "UnorderedList", "Newline"]
+                    availableRanges.forEach((v) => {
+                        let filtered = this.holderArray.filter(
+                            (holder) => allowedType.find((type) => type === holder.type) !== undefined && holder.range.isContainedIn(v)
+                        );
+                        filtered.forEach(element => element.availableRange = v);
+                    });
+                    
+                    this.pushGroup({ group: new Group("Table"), elems: [...filtered] })
                 }
             }
 
@@ -1288,8 +1363,9 @@ export class NamuMark {
             });
         }
 
-        // console.log(this.holderArray)
-        // console.log(util.inspect(this.groupArray, false, null, true))
+        // console.log(util.inspect(this.holderArray, false, 3, true))
+        console.log(util.inspect(decoArray, false, 3, true))
+        // console.log(util.inspect(tableArray, false, 4, true))
     }
     
     parse() {
