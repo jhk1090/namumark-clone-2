@@ -145,8 +145,8 @@ const groupper = (mark: NamuMark) => {
                     })
                 } else {
                     const availableRange = new Range(ignoredRange.end, triple.elems[1].range.start);
-                    mark.holderArray.filter(v => v.type !== "Newline").forEach(v => {
-                        if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
+                    mark.holderArray.forEach(v => {
+                        if (v.type !== "TripleBracketOpen" && v.type !== "Newline" && v.range.isOverlap(ignoredRange)) {
                             v.ignore = true;
                         }
                         if (v.range.isContainedIn(availableRange)) {
@@ -191,7 +191,7 @@ const groupper = (mark: NamuMark) => {
             }
             if ((match = wikiRegex.exec(content)) !== null) {
                 if (filteredSliced.length === 0) {
-                    ignoredRange = new Range(triple.elems[0].range.end, elem.eolRange.end)
+                    ignoredRange = new Range(triple.elems[0].range.end, elem.eolRange.end - 1)
                     doMatchIgnoring();
                     triple.property = {type: "Wiki"}
                 } else {

@@ -9,6 +9,32 @@ interface IOffset {
 }
 export type regexType = [RegExp, HolderType, IOffset?]
 
+export interface IIndent {
+    type: "List" | "Cite" | "Indent";
+    count: number;
+    element: HolderElem;
+    children: IIndent[];
+}
+
+export type parserStoreType = {
+    tripleBracketQueue: HolderElem[];
+    squareBracketArray: { value: HolderElem[]; max: number }[];
+    headingOpenElement?: HolderElem;
+    mathOpenElement?: HolderElem;
+    footnoteQueue: [HolderElem, HolderElem][];
+    decoArray: { [k in "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma"]: HolderElem[] };
+    tableArray: {
+        [k: string]: {
+            indentSequence: { count: number; type: HolderType }[] | null;
+            rowStartIndex: number;
+            argumentHolder: HolderElem | null;
+            isTableEnd: boolean;
+            data: HolderElem[][];
+        };
+    };
+    indentArray: { [k: string]: { min: number | null; lastNewlineUUID: string | null; data: IIndent[][] } };
+}
+
 export abstract class Elem {
     uuid: string = uuidv4();
     range: Range = new Range(0, 1);

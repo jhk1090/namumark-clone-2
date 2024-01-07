@@ -1,11 +1,12 @@
 import { Range, seekEOL } from "./utils";
-import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, regexType } from "./elem";
+import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, parserStoreType, regexType } from "./elem";
 import firstGroupper from "./groupper/firstGroupper";
 import secondGroupper from "./groupper/secondGroupper";
 import thirdGroupper from "./groupper/thirdGroupper";
 import fourthGroupper from "./groupper/fourthGroupper";
 import { GroupperReturnType } from "./groupper";
 import { ProcessorProps } from "./processor";
+import fifthGroupper from "./groupper/fifthGroupper";
 const util = require("node:util");
 
 export class NamuMark {
@@ -67,8 +68,8 @@ export class NamuMark {
         let [regex, type, offset] = arr;
         let offsetStart = offset?.start ?? 0;
         let offsetEnd = offset?.end ?? 0;
-        let offsetUseGroupStart = offset?.useGroupStart
-        let offsetUseGroupEnd = offset?.useGroupEnd
+        let offsetUseGroupStart = offset?.useGroupStart;
+        let offsetUseGroupEnd = offset?.useGroupEnd;
 
         let match;
 
@@ -79,7 +80,7 @@ export class NamuMark {
             if (offsetUseGroupEnd !== undefined) {
                 offsetEnd = match.groups?.[offsetUseGroupEnd].length as number;
             }
-            
+
             let target;
             let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd);
             for (const eol of this.eolHolderArray) {
@@ -114,7 +115,7 @@ export class NamuMark {
         const tripleBracketClose: regexType = [/\}\}\}/g, "TripleBracketClose"];
         const indent: regexType = [/\n( ){1,}/g, "Indent", { start: 1 }];
         const citeIndent: regexType = [/\>( ){1,}/g, "CiteIndent", { start: 1 }];
-        const listIndent: regexType = [/(?<head>((\>|( ))(\*|(1|a|A|i|I)\.(\#\d)?)))( ){1,}/g, "ListIndent", { useGroupStart: "head" }]
+        const listIndent: regexType = [/(?<head>((\>|( ))(\*|(1|a|A|i|I)\.(\#\d)?)))( ){1,}/g, "ListIndent", { useGroupStart: "head" }];
         const unorderedList: regexType = [/(?<head>(\>|( )))\*/g, "UnorderedList", { useGroupStart: "head" }];
         const orderedList: regexType = [/(?<head>(\>|( )))(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", { useGroupStart: "head" }];
         const citeUnorderedList: regexType = [/(\>)( ){1,}\*/g, "CiteUnorderedList", { start: 1 }];
@@ -174,15 +175,7 @@ export class NamuMark {
         this.holderArray.sort((a, b) => a.range.start - b.range.start);
     }
 
-    parserStore: {
-        tripleBracketQueue: HolderElem[],
-        squareBracketArray: { value: HolderElem[]; max: number }[],
-        headingOpenElement?: HolderElem, 
-        mathOpenElement?: HolderElem,
-        footnoteQueue: [HolderElem, HolderElem][],
-        decoArray: { [k in "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma"]: HolderElem[] }
-        tableArray: {[k: string]: {indentSequence: { count: number; type: HolderType }[] | null; rowStartIndex: number; argumentHolder: HolderElem | null; isTableEnd: boolean; data: HolderElem[][];}}
-    } = {
+    parserStore: parserStoreType = {
         tripleBracketQueue: [],
         squareBracketArray: [],
         headingOpenElement: undefined,
@@ -196,11 +189,12 @@ export class NamuMark {
             Carot: [],
             Comma: [],
         },
-        tableArray: {}
-    }
-    
+        tableArray: {},
+        indentArray: {},
+    };
+
     doParsing() {
-        const processorTuple: GroupperReturnType[] = [firstGroupper, secondGroupper, thirdGroupper, fourthGroupper];
+        const processorTuple: GroupperReturnType[] = [firstGroupper, secondGroupper, thirdGroupper, fourthGroupper, fifthGroupper];
 
         for (const [currentMappedProcessor, currentGrouping] of processorTuple) {
             for (let idx = 0; idx < this.holderArray.length; idx++) {
@@ -227,11 +221,11 @@ export class NamuMark {
             });
         }
 
-        console.log(util.inspect(this.holderArray, false, 3, true))
+        console.log(util.inspect(this.parserStore.indentArray, false, 4, true));
         // console.log(util.inspect(decoArray, false, 3, true))
         // console.log(util.inspect(tableArray, false, 4, true))
     }
-    
+
     parse() {
         this.processRedirect();
         if (this.isRedirect === false) {
