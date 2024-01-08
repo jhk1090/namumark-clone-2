@@ -25,7 +25,7 @@ export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
     if (currentTable === undefined) {
         // if (adjNext !== "\n") {
         const precedeEndlineIndex = mark.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
         const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
         tableArray[elem.availableRange.toString()] = {indentSequence, rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
@@ -36,7 +36,7 @@ export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
 
     if (currentTable.data[0].length === 0) {
         const precedeEndlineIndex = mark.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
         const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
         tableArray[elem.availableRange.toString()].indentSequence = indentSequence;
@@ -44,7 +44,7 @@ export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
 
     if (currentTable.isTableEnd) {
         const precedeEndlineIndex = mark.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Indent" || v.type === "CiteIndent" || v.type === "ListIndent");
+        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
         const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
         const isSequenceEqual = (x: {count: number; type: HolderType}[], y: {count: number; type: HolderType}[]) => {
@@ -56,12 +56,12 @@ export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
                 return false;
             }
 
-            if (x.filter(v => v.type === "ListIndent").length > 0 && y.filter(v => v.type === "ListIndent").length > 0) {
+            if (x.filter(v => v.type === "List>Indent").length > 0 && y.filter(v => v.type === "List>Indent").length > 0) {
                 return false;
             }
 
-            x = x.map(v => v.type === "ListIndent" ? { count: v.count - 1, type: v.type } : v )
-            y = y.map(v => v.type === "ListIndent" ? { count: v.count - 1, type: v.type } : v )
+            x = x.map(v => v.type === "List>Indent" ? { count: v.count - 1, type: v.type } : v )
+            y = y.map(v => v.type === "List>Indent" ? { count: v.count - 1, type: v.type } : v )
             
             if (x.reduce((acc, cur) => acc + cur.count, 0) !== y.reduce((acc, cur) => acc + cur.count, 0)) {
                 return false;
@@ -73,7 +73,7 @@ export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
             let ycount = y[yidx].count;
 
             while (true) {
-                if (x[xidx].type !== "ListIndent" && y[yidx].type !== "ListIndent" && x[xidx].type !== y[yidx].type) {
+                if (x[xidx].type !== "List>Indent" && y[yidx].type !== "List>Indent" && x[xidx].type !== y[yidx].type) {
                     return false;
                 }
                 if (xcount < ycount) {

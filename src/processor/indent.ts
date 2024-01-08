@@ -25,7 +25,7 @@ export const indentNewlineProcessor = (mark: NamuMark, props: ProcessorProps) =>
         return;
     }
 
-    if (indent.type !== "Indent") {
+    if (indent.type !== "Newline>Indent") {
         if (currentArray === undefined || currentArray.data[0].length === 0) {
             return;    
         }

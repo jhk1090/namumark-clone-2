@@ -99,13 +99,10 @@ export class NamuMark {
     }
 
     collectHolderElem() {
-        // linkpipe, tablecell
         const pipe: regexType = [/\|/g, "Pipe"];
         const comment: regexType = [/\n##/g, "Comment", { start: 1 }];
-        // linkOpen, macroOpen
         const squareBracketOpen: regexType = [/\[/g, "SquareBracketOpen"];
         const footnoteOpen: regexType = [/\[\*/g, "FootnoteOpen", { start: 1 }];
-        // footnoteclose, linkclose, macroclose
         const squareBracketClose: regexType = [/\]/g, "SquareBracketClose"];
         const macroArgumentOpen: regexType = [/\(/g, "ParenthesisOpen"];
         const macroArgumentClose: regexType = [/\)/g, "ParenthesisClose"];
@@ -113,14 +110,46 @@ export class NamuMark {
         const headingClose: regexType = [/ (#?)={1,6}\n/g, "HeadingClose", { end: -1 }];
         const tripleBracketOpen: regexType = [/\{\{\{/g, "TripleBracketOpen"];
         const tripleBracketClose: regexType = [/\}\}\}/g, "TripleBracketClose"];
-        const indent: regexType = [/\n( ){1,}/g, "Indent", { start: 1 }];
-        const citeIndent: regexType = [/\>( ){1,}/g, "CiteIndent", { start: 1 }];
-        const listIndent: regexType = [/(?<head>((\>|( ))(\*|(1|a|A|i|I)\.(\#\d)?)))( ){1,}/g, "ListIndent", { useGroupStart: "head" }];
-        const unorderedList: regexType = [/(?<head>(\>|( )))\*/g, "UnorderedList", { useGroupStart: "head" }];
-        const orderedList: regexType = [/(?<head>(\>|( )))(1|a|A|i|I)\.(\#\d)?/g, "OrderedList", { useGroupStart: "head" }];
-        const citeUnorderedList: regexType = [/(\>)( ){1,}\*/g, "CiteUnorderedList", { start: 1 }];
-        const citeOrderedList: regexType = [/(\>)( ){1,}(1|a|A|i|I)\.(\#\d)?/g, "CiteOrderedList", { start: 1 }];
-        const cite: regexType = [/(?<head>\n|\>|( )|((\>|( ))(\*|(1|a|A|i|I)\.(\#\d)?)))\>( ){0,}/g, "Cite", { useGroupStart: "head" }];
+
+        const orderedListRegex = /(1|a|A|i|I)\.(\#\d)?/
+        const unorderedListRegex = /\*/
+        const listRegex = new RegExp(`(${unorderedListRegex.source}|${orderedListRegex.source})`);
+
+        const newline_indent: regexType = [/\n( ){1,}/g, "Newline>Indent", { start: 1 }];
+        const cite_indent: regexType = [new RegExp(`(?<head>\>)( ){1,}`, "g"), "Cite>Indent", { useGroupStart: "head" }];
+        const list_indent: regexType = [new RegExp(`(?<head>${listRegex.source})( ){1,}`, "g"), "List>Indent", { useGroupStart: "head" }];
+        
+        const listIndentRegexes = new RegExp("((?<newline>\n( ){1,})|(?<cite>>( ){1,}))");
+
+        const indent_unorderedList: regexType = [
+            new RegExp(`(?<head>${listIndentRegexes.source})${unorderedListRegex.source}`, "g"),
+            "Indent>UnorderedList",
+            { useGroupStart: "head" },
+        ]; // x*
+        const indent_orderedList: regexType = [
+            new RegExp(`(?<head>${listIndentRegexes.source})${orderedListRegex.source}`, "g"),
+            "Indent>OrderedList",
+            { useGroupStart: "head" },
+        ]; // x1.
+        const cite_unorderedList: regexType = [
+            new RegExp(`(?<head>\>)${unorderedListRegex.source}`, "g"),
+            "Cite>UnorderedList",
+            { useGroupStart: "head" },
+        ]; // >*
+        const cite_orderedList: regexType = [
+            new RegExp(`(?<head>\>)${orderedListRegex.source}`, "g"),
+            "Cite>OrderedList",
+            { useGroupStart: "head" },
+        ]; // >1.
+
+        const citeIndentRegexes = /((?<newline>\n( ){1,})|(?<cite>>( ){1,})|(?<list>((\*|(1|a|A|i|I)\.(\#\d)?))( ){1,}))/g
+
+        console.log(new RegExp(`(?<head>${citeIndentRegexes.source})\>`, "g"))
+        const newline_cite: regexType = [/(?<head>\n)\>/g, "Newline>Cite", { useGroupStart: "head"}] //\n>
+        const indent_cite: regexType = [new RegExp(`(?<head>${citeIndentRegexes.source})\>`, "g"), "Indent>Cite", { useGroupStart: "head" }]; // x>
+        const cite_cite: regexType = [new RegExp(`(?<head>\>)\>`, "g"), "Cite>Cite", { useGroupStart: "head" }]; // >>
+        const list_cite: regexType = [new RegExp(`(?<head>${listRegex.source})\>`, "g"), "List>Cite", { useGroupStart: "head" }]; // *>
+
         const tableArgumentOpen: regexType = [/(\||\>)\</g, "TableArgumentOpen", { start: 1 }];
         const tableArgumentClose: regexType = [/(\w{1})\>/g, "TableArgumentClose", { start: 1 }];
         const mathTagOpen: regexType = [/\<math\>/g, "MathTagOpen"];
@@ -146,14 +175,17 @@ export class NamuMark {
             headingClose,
             tripleBracketOpen,
             tripleBracketClose,
-            indent,
-            citeIndent,
-            listIndent,
-            unorderedList,
-            orderedList,
-            citeUnorderedList,
-            citeOrderedList,
-            cite,
+            newline_indent,
+            cite_indent,
+            list_indent,
+            indent_unorderedList,
+            indent_orderedList,
+            cite_unorderedList,
+            cite_orderedList,
+            newline_cite,
+            indent_cite,
+            cite_cite,
+            list_cite,
             tableArgumentOpen,
             tableArgumentClose,
             mathTagOpen,
@@ -221,7 +253,7 @@ export class NamuMark {
             });
         }
 
-        console.log(util.inspect(this.parserStore.indentArray, false, 4, true));
+        console.log(util.inspect(this.holderArray, false, 3, true));
         // console.log(util.inspect(decoArray, false, 3, true))
         // console.log(util.inspect(tableArray, false, 4, true))
     }

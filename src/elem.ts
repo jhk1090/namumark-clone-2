@@ -9,8 +9,9 @@ interface IOffset {
 }
 export type regexType = [RegExp, HolderType, IOffset?]
 
+type OrderedListSuffix = "1" | "a" | "A" | "i" | "I"
 export interface IIndent {
-    type: "List" | "Cite" | "Indent";
+    type: "Indent" | "Cite" | `OrderedList-${OrderedListSuffix}` | `OrderedList-Ordered-${OrderedListSuffix}` | `UnorderedList`;
     count: number;
     element: HolderElem;
     children: IIndent[];
@@ -180,7 +181,7 @@ export class Group<Type extends GroupType> extends BaseGroup {
     }
 }
 
-export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "Indent" | "CiteIndent" | "ListIndent" | "UnorderedList" | "OrderedList" | "CiteUnorderedList" | "CiteOrderedList" | "Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
+export type HolderType = "Pipe" /* TableCell, LinkPipe */ | "Comment" | "ParenthesisOpen" | "ParenthesisClose" | "SquareBracketOpen" /* LinkOpen, MacroOpen */ | "SquareBracketClose" /* LinkClose, MacroClose, FootnoteClose */ | "HeadingOpen" | "HeadingClose" | "TripleBracketOpen" | "TripleBracketClose" | "Newline>Indent" | "Cite>Indent" | "List>Indent" | "Indent>UnorderedList" | "Indent>OrderedList" | "Cite>UnorderedList" | "Cite>OrderedList" | "Newline>Cite" | "Indent>Cite" | "Cite>Cite" | "List>Cite" | "FootnoteOpen" | "TableArgumentOpen" | "TableArgumentClose" | "MathTagOpen" | "MathTagClose" | "Quote" | "Underbar" | "Tilde" | "Carot" | "Comma" | "Hyphen" | "Escape" | "Newline" | ""
 
 export class HolderElem {
     range: Range = new Range(0, 1);
