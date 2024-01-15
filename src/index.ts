@@ -118,16 +118,14 @@ export class NamuMark {
         const newline_indent: regexType = [/\n( ){1,}/g, "Newline>Indent", { start: 1 }];
         const cite_indent: regexType = [new RegExp(`(?<head>\>)( ){1,}`, "g"), "Cite>Indent", { useGroupStart: "head" }];
         const list_indent: regexType = [new RegExp(`(?<head>${listRegex.source})( ){1,}`, "g"), "List>Indent", { useGroupStart: "head" }];
-        
-        const listIndentRegexes = new RegExp("((?<newline>\n( ){1,})|(?<cite>>( ){1,}))");
 
         const indent_unorderedList: regexType = [
-            new RegExp(`(?<head>${listIndentRegexes.source})${unorderedListRegex.source}`, "g"),
+            new RegExp(`(?<head>( ){1,})${unorderedListRegex.source}`, "g"),
             "Indent>UnorderedList",
             { useGroupStart: "head" },
         ]; // x*
         const indent_orderedList: regexType = [
-            new RegExp(`(?<head>${listIndentRegexes.source})${orderedListRegex.source}`, "g"),
+            new RegExp(`(?<head>( ){1,})${orderedListRegex.source}`, "g"),
             "Indent>OrderedList",
             { useGroupStart: "head" },
         ]; // x1.
@@ -142,11 +140,8 @@ export class NamuMark {
             { useGroupStart: "head" },
         ]; // >1.
 
-        const citeIndentRegexes = /((?<newline>\n( ){1,})|(?<cite>>( ){1,})|(?<list>((\*|(1|a|A|i|I)\.(\#\d)?))( ){1,}))/g
-
-        console.log(new RegExp(`(?<head>${citeIndentRegexes.source})\>`, "g"))
         const newline_cite: regexType = [/(?<head>\n)\>/g, "Newline>Cite", { useGroupStart: "head"}] //\n>
-        const indent_cite: regexType = [new RegExp(`(?<head>${citeIndentRegexes.source})\>`, "g"), "Indent>Cite", { useGroupStart: "head" }]; // x>
+        const indent_cite: regexType = [new RegExp('(?<head>( ){1,})\>', "g"), "Indent>Cite", { useGroupStart: "head" }]; // x>
         const cite_cite: regexType = [new RegExp(`(?<head>\>)\>`, "g"), "Cite>Cite", { useGroupStart: "head" }]; // >>
         const list_cite: regexType = [new RegExp(`(?<head>${listRegex.source})\>`, "g"), "List>Cite", { useGroupStart: "head" }]; // *>
 
@@ -204,6 +199,7 @@ export class NamuMark {
             this.evaluateHolder(evaluator);
         }
 
+        
         this.holderArray.sort((a, b) => a.range.start - b.range.start);
     }
 
@@ -253,7 +249,16 @@ export class NamuMark {
             });
         }
 
-        console.log(util.inspect(this.holderArray, false, 3, true));
+        console.log(
+            util.inspect(
+                this.holderArray.map((v) => {
+                    return { range: v.range.toString(), type: v.type, group: v.group.map(v => { return [v.type, v.uuid.substring(0, 4)]}) };
+                }),
+                false,
+                3,
+                true
+            )
+        );
         // console.log(util.inspect(decoArray, false, 3, true))
         // console.log(util.inspect(tableArray, false, 4, true))
     }
