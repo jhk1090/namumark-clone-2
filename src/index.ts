@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, parserStoreType, regexType } from "./elem";
+import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, IIndent, parserStoreType, regexType } from "./elem";
 import firstGroupper from "./groupper/firstGroupper";
 import secondGroupper from "./groupper/secondGroupper";
 import thirdGroupper from "./groupper/thirdGroupper";
@@ -248,7 +248,7 @@ export class NamuMark {
                 return true;
             });
         }
-
+        /* logging */
         console.log(
             util.inspect(
                 this.holderArray.map((v) => {
@@ -259,8 +259,25 @@ export class NamuMark {
                 true
             )
         );
-        // console.log(util.inspect(decoArray, false, 3, true))
-        // console.log(util.inspect(tableArray, false, 4, true))
+
+        function excludeElement(array: IIndent[]) {
+            interface ModifiedIIndent {
+                t: "x" | ">" | "*";
+                c: number;
+                d: ModifiedIIndent[];
+            }
+            const output: ModifiedIIndent[] = [];
+            for (let element of array) {
+                let t: "x" | ">" | "*" = element.type === "Indent" ? "x" : element.type === "Cite" ? ">" : "*";
+                output.push({ t: t, c: element.count, d: excludeElement(element.children) })
+            }
+            return output;
+        }
+        for (const [key, value] of Object.entries(this.parserStore.indentArray)) {
+            console.log(key)
+            console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
+        }
+        /* logging */
     }
 
     parse() {
