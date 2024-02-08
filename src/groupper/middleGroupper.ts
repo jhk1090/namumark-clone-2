@@ -1,9 +1,10 @@
 import { GroupperReturnType, ProcessorType } from ".";
 import { NamuMark } from "..";
-import { indentNewlineProcessor } from "../processor/indent";
+import { indentlikeProcessor } from "../processor/indentlike";
 
 const mappedProcessor: ProcessorType = {
-   
+    "Newline>Cite": [ indentlikeProcessor ],
+    "Newline>Indent": [ indentlikeProcessor ]
 }
 
 const groupper = (mark: NamuMark) => {

@@ -17,6 +17,9 @@ export interface IIndent {
     children: IIndent[];
 }
 
+/** p stands for precede, c stands for count */
+export type IlStructure = { indentSize: { p: "Newline" | "Cite" | "List", c: number }[], sequence: ("Indent" | "List" | "Cite")[]};
+
 export type parserStoreType = {
     tripleBracketQueue: HolderElem[];
     squareBracketArray: { value: HolderElem[]; max: number }[];
@@ -34,6 +37,8 @@ export type parserStoreType = {
         };
     };
     indentArray: { [k: string]: { min: number | null; lastNewlineUUID: string | null; data: IIndent[][] } };
+    tempIndentlikeArray: { [k: string]: { range: Range, data: HolderElem[], structure: IlStructure }[] };
+    indentlikeArray?: { [k: string]: [] };
 }
 
 export abstract class Elem {

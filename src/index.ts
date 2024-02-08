@@ -7,6 +7,7 @@ import fourthGroupper from "./groupper/fourthGroupper";
 import { GroupperReturnType } from "./groupper";
 import { ProcessorProps } from "./processor";
 import fifthGroupper from "./groupper/fifthGroupper";
+import middleGroupper from "./groupper/middleGroupper";
 const util = require("node:util");
 
 export class NamuMark {
@@ -219,10 +220,11 @@ export class NamuMark {
         },
         tableArray: {},
         indentArray: {},
+        tempIndentlikeArray: {}
     };
 
     doParsing() {
-        const processorTuple: GroupperReturnType[] = [firstGroupper, secondGroupper, thirdGroupper, fourthGroupper, fifthGroupper];
+        const processorTuple: GroupperReturnType[] = [firstGroupper, middleGroupper, secondGroupper, thirdGroupper, fourthGroupper, fifthGroupper];
 
         for (const [currentMappedProcessor, currentGrouping] of processorTuple) {
             for (let idx = 0; idx < this.holderArray.length; idx++) {
@@ -277,6 +279,7 @@ export class NamuMark {
             console.log(key)
             console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
         }
+        console.log(util.inspect(this.parserStore.tempIndentlikeArray, false, 5, true))
         /* logging */
     }
 
