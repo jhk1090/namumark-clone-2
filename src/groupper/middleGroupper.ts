@@ -8,6 +8,11 @@ const mappedProcessor: ProcessorType = {
 }
 
 const groupper = (mark: NamuMark) => {
+    for (const [innerArrayAR, innerArray] of Object.entries(mark.parserStore.indentlikeArray)) {
+        for (const innerElem of innerArray) {
+            
+        }
+    }
 }
 
 export default [mappedProcessor, groupper] as GroupperReturnType

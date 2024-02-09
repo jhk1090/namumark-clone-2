@@ -1,10 +1,10 @@
 import { ProcessorProps } from ".";
 import { NamuMark } from "..";
-import { IlStructure } from "../elem";
+import { IlStructure, IlStructureFollow, IlStructurePrecede } from "../elem";
 import { Range } from "../utils";
 
 export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const innerArray = mark.parserStore.tempIndentlikeArray;
+    const innerArray = mark.parserStore.indentlikeArray;
 
     const elem = mark.holderArray[props.idx];
     const INNER_AR = elem.availableRange.toString();
@@ -19,17 +19,17 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
     let isIndentlikeFinished = false;
     let lastIndentlikeRange: Range = elem.range;
     type OriginType = "Newline" | "Cite" | "List" | "Indent";
-    type CurrentType = "Cite" | "UnorderedList" | "OrderedList" | "Indent";
-    let [originType, currentType] = elem.type.split(">") as [OriginType, CurrentType];
+    type FollowType = "Cite" | "UnorderedList" | "OrderedList" | "Indent";
+    let [precedeType, followType] = elem.type.split(">") as [IlStructurePrecede, FollowType];
     const matchType = () => {
-        switch (currentType) {
+        switch (followType) {
             case "Cite":
-                return originType === "Cite";
+                return precedeType === "Cite";
             case "OrderedList":
             case "UnorderedList":
-                return originType === "List";
+                return precedeType === "List";
             case "Indent":
-                return originType === "Indent";
+                return precedeType === "Indent";
             default:
                 return false;
         }
@@ -43,9 +43,9 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
         const subElem = slicedArray[i];
 
         if (!isIndentlikeFinished) {
-            originType = subElem.type.split(">")[0] as OriginType;
+            precedeType = subElem.type.split(">")[0] as OriginType;
             if (lastIndentlikeRange.isAdjacent(subElem.range) && matchType()) {
-                currentType = subElem.type.split(">")[1] as CurrentType;
+                followType = subElem.type.split(">")[1] as FollowType;
                 adjacentIndentlike.push(subElem);
                 lastIndentlikeRange = subElem.range;
                 continue;
@@ -67,9 +67,16 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
         innerArray[INNER_AR] = [];
     }
     let structure: IlStructure = { indentSize: [], sequence: [] };
+    const followRegex = /(?<suffix>1|a|A|i|I)\.(?<isOrdered>\#\d)?/g;
     adjacentIndentlike.forEach(v => {
-        const [precede, follow] = v.type.split(">") as ["Newline" | "Cite" | "List" | "Indent", "Indent" | "List" | "Cite"];
-        structure.sequence.push(follow)
+        const [precede, follow] = v.type.split(">") as [IlStructurePrecede, FollowType];
+        if (follow === "OrderedList") {
+            const { suffix, isOrdered } = followRegex.exec(mark.wikiText.substring(v.range.start, v.range.end))?.groups as { suffix: "1" | "a" | "A" | "i" | "I", isOrdered?: string }
+            structure.sequence.push(`OrderedList-${isOrdered !== undefined ? "Ordered-" : ""}${suffix}`)
+        } else {
+            structure.sequence.push(follow)
+        }
+
         if (follow === "Indent") {
             structure.indentSize.push({p: precede as "Newline" | "Cite" | "List", c: v.range.end - v.range.start})
         }

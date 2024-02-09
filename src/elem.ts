@@ -17,8 +17,17 @@ export interface IIndent {
     children: IIndent[];
 }
 
+export type IlStructurePrecede = "Newline" | "Indent" | "Cite" | "List";
+export type IlStructureFollow = "Indent" | `OrderedList-${OrderedListSuffix}` | `OrderedList-Ordered-${OrderedListSuffix}` | "UnorderedList" | "Cite"
+export interface IlIndent {
+    type: IlStructureFollow;
+    count: number;
+    element: HolderElem;
+    children: IlIndent[];
+}
+
 /** p stands for precede, c stands for count */
-export type IlStructure = { indentSize: { p: "Newline" | "Cite" | "List", c: number }[], sequence: ("Indent" | "List" | "Cite")[]};
+export type IlStructure = { indentSize: { p: IlStructurePrecede; c: number }[]; sequence: IlStructureFollow[] };
 
 export type parserStoreType = {
     tripleBracketQueue: HolderElem[];
@@ -37,8 +46,8 @@ export type parserStoreType = {
         };
     };
     indentArray: { [k: string]: { min: number | null; lastNewlineUUID: string | null; data: IIndent[][] } };
-    tempIndentlikeArray: { [k: string]: { range: Range, data: HolderElem[], structure: IlStructure }[] };
-    indentlikeArray?: { [k: string]: [] };
+    indentlikeArray: { [k: string]: { range: Range, data: HolderElem[], structure: IlStructure }[] };
+    indentlikeTreeArray: { [k: string]: { min: number; data: IlIndent[][] } };
 }
 
 export abstract class Elem {

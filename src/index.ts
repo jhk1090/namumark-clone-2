@@ -220,7 +220,8 @@ export class NamuMark {
         },
         tableArray: {},
         indentArray: {},
-        tempIndentlikeArray: {}
+        indentlikeArray: {},
+        indentlikeTreeArray: {}
     };
 
     doParsing() {
@@ -279,7 +280,7 @@ export class NamuMark {
             console.log(key)
             console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
         }
-        console.log(util.inspect(this.parserStore.tempIndentlikeArray, false, 5, true))
+        console.log(util.inspect(this.parserStore.indentlikeArray, false, 5, true))
         /* logging */
     }
 
