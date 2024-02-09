@@ -22,12 +22,13 @@ export type IlStructureFollow = "Indent" | `OrderedList-${OrderedListSuffix}` | 
 export interface IlIndent {
     type: IlStructureFollow;
     count: number;
-    element: HolderElem;
+    originElement: IlElement;
     children: IlIndent[];
 }
 
 /** p stands for precede, c stands for count */
 export type IlStructure = { indentSize: { p: IlStructurePrecede; c: number }[]; sequence: IlStructureFollow[] };
+export type IlElement = { range: Range, data: HolderElem[], structure: IlStructure, uuid: string; };
 
 export type parserStoreType = {
     tripleBracketQueue: HolderElem[];
@@ -46,8 +47,8 @@ export type parserStoreType = {
         };
     };
     indentArray: { [k: string]: { min: number | null; lastNewlineUUID: string | null; data: IIndent[][] } };
-    indentlikeArray: { [k: string]: { range: Range, data: HolderElem[], structure: IlStructure }[] };
-    indentlikeTreeArray: { [k: string]: { min: number; data: IlIndent[][] } };
+    indentlikeArray: { [k: string]: IlElement[] };
+    indentlikeTreeArray: { [k: string]: { data: IlIndent[][]; lastElement: IlElement | null} };
 }
 
 export abstract class Elem {

@@ -2,6 +2,7 @@ import { ProcessorProps } from ".";
 import { NamuMark } from "..";
 import { IlStructure, IlStructureFollow, IlStructurePrecede } from "../elem";
 import { Range } from "../utils";
+import { v4 as uuidv4 } from "uuid";
 
 export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
     const innerArray = mark.parserStore.indentlikeArray;
@@ -67,11 +68,12 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
         innerArray[INNER_AR] = [];
     }
     let structure: IlStructure = { indentSize: [], sequence: [] };
-    const followRegex = /(?<suffix>1|a|A|i|I)\.(?<isOrdered>\#\d)?/g;
+    const followRegex = /(?<suffix>1|a|A|i|I)\.(?<isOrdered>\#\d{1,})?/g;
     adjacentIndentlike.forEach(v => {
         const [precede, follow] = v.type.split(">") as [IlStructurePrecede, FollowType];
         if (follow === "OrderedList") {
             const { suffix, isOrdered } = followRegex.exec(mark.wikiText.substring(v.range.start, v.range.end))?.groups as { suffix: "1" | "a" | "A" | "i" | "I", isOrdered?: string }
+            followRegex.lastIndex = 0;
             structure.sequence.push(`OrderedList-${isOrdered !== undefined ? "Ordered-" : ""}${suffix}`)
         } else {
             structure.sequence.push(follow)
@@ -80,8 +82,14 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
         if (follow === "Indent") {
             structure.indentSize.push({p: precede as "Newline" | "Cite" | "List", c: v.range.end - v.range.start})
         }
+
+        /* \n> >*> 같은 경우 예방 */
+        if (precede !== "Indent" && follow !== "Indent") {
+            structure.indentSize.push({p: precede as "Newline" | "Cite" | "List", c: 0})
+        }
     })
-    innerArray[INNER_AR].push({ range: new Range(elem.range.start, rangeEnd), data: adjacentIndentlike, structure });
+    innerArray[INNER_AR].push({ range: new Range(elem.range.start, rangeEnd), data: adjacentIndentlike, structure, uuid: uuidv4() });
 
     props.setIdx(props.idx + adjacentIndentlike.length - 1);
 };
+

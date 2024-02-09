@@ -1,5 +1,5 @@
 import { Range, seekEOL } from "./utils";
-import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, IIndent, parserStoreType, regexType } from "./elem";
+import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, IIndent, IlIndent, parserStoreType, regexType } from "./elem";
 import firstGroupper from "./groupper/firstGroupper";
 import secondGroupper from "./groupper/secondGroupper";
 import thirdGroupper from "./groupper/thirdGroupper";
@@ -112,7 +112,7 @@ export class NamuMark {
         const tripleBracketOpen: regexType = [/\{\{\{/g, "TripleBracketOpen"];
         const tripleBracketClose: regexType = [/\}\}\}/g, "TripleBracketClose"];
 
-        const orderedListRegex = /(1|a|A|i|I)\.(\#\d)?/
+        const orderedListRegex = /(1|a|A|i|I)\.(\#\d{1,})?/
         const unorderedListRegex = /\*/
         const listRegex = new RegExp(`(${unorderedListRegex.source}|${orderedListRegex.source})`);
 
@@ -263,24 +263,24 @@ export class NamuMark {
             )
         );
 
-        function excludeElement(array: IIndent[]) {
-            interface ModifiedIIndent {
-                t: "x" | ">" | "*";
-                c: number;
-                d: ModifiedIIndent[];
-            }
-            const output: ModifiedIIndent[] = [];
-            for (let element of array) {
-                let t: "x" | ">" | "*" = element.type === "Indent" ? "x" : element.type === "Cite" ? ">" : "*";
-                output.push({ t: t, c: element.count, d: excludeElement(element.children) })
-            }
-            return output;
-        }
-        for (const [key, value] of Object.entries(this.parserStore.indentArray)) {
-            console.log(key)
-            console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
-        }
-        console.log(util.inspect(this.parserStore.indentlikeArray, false, 5, true))
+        // function excludeElement(array: IlIndent[]) {
+        //     interface ModifiedIIndent {
+        //         t: "x" | ">" | "*" | "1#" | "1";
+        //         c: number;
+        //         d: ModifiedIIndent[];
+        //     }
+        //     const output: ModifiedIIndent[] = [];
+        //     for (let element of array) {
+        //         let t: "x" | ">" | "*" | "1#" | "1" = element.type === "Indent" ? "x" : element.type === "Cite" ? ">" : element.type === "UnorderedList" ? "*" : element.type.startsWith("OrderedList-Ordered") ? "1#" : "1";
+        //         output.push({ t: t, c: element.count, d: excludeElement(element.children) })
+        //     }
+        //     return output;
+        // }
+        // for (const [key, value] of Object.entries(this.parserStore.indentlikeTreeArray)) {
+        //     console.log(key)
+        //     console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
+        // }
+        // console.log(util.inspect(this.parserStore.indentlikeTreeArray, false, 5, true))
         /* logging */
     }
 
