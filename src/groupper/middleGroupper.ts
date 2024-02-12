@@ -1,6 +1,6 @@
 import { GroupperReturnType, ProcessorType } from ".";
 import { NamuMark } from "..";
-import { IlIndent, IlStructureFollow } from "../elem";
+import { IlElement, IlIndent, IlStructureFollow } from "../elem";
 import { indentlikeProcessor } from "../processor/indentlike";
 
 const mappedProcessor: ProcessorType = {
@@ -17,27 +17,27 @@ const groupper = (mark: NamuMark) => {
         for (let idx = 0; idx < innerArray.length; idx++) {
             const innerElem = innerArray[idx];
             const { data: innerData, range: innerRange, structure: { indentSize: innerIndentSize, sequence: innerSequence }, uuid: innerUUID } = innerElem;
-
-            if (treeArray[innerArrayAR].lastElement === null) {
+            const compileFirstARRow = () => {
                 let indentStruct: IlIndent | null = null;
                 let indentStructRef: IlIndent[] | null = null;
                 treeArray[innerArrayAR].lastElement = innerElem;
-                const filtered = innerSequence.filter(v => v !== "Indent")
-                console.log(innerIndentSize)
+                const filtered = innerSequence.filter((v) => v !== "Indent");
+                console.log(innerIndentSize, innerSequence);
                 for (const [idx, value] of filtered.entries()) {
-                    const output: IlIndent = { type: value, children: [], count: innerIndentSize[idx].c, originElement: innerElem }
+                    const output: IlIndent = { type: value, children: [], count: innerIndentSize[idx].c, originElement: innerElem };
                     if (indentStruct === null) {
-                        indentStruct = output
+                        indentStruct = output;
                         indentStructRef = indentStruct.children;
                     } else {
                         if (indentStructRef === null) {
                             break;
                         }
-                        indentStructRef.push(output)
-                        indentStructRef = indentStructRef[indentStructRef.length - 1].children
+                        indentStructRef.push(output);
+                        indentStructRef = indentStructRef[indentStructRef.length - 1].children;
                     }
                 }
-                const util = require('util');
+                return indentStruct as IlIndent;
+                /*const util = require('util');
                 function excludeElement(array: IlIndent[]) {
                     interface ModifiedIIndent {
                         t: "x" | ">" | "*" | "1#" | "1";
@@ -51,8 +51,69 @@ const groupper = (mark: NamuMark) => {
                     }
                     return output;
                 }
-                console.log(util.inspect(excludeElement([indentStruct] as IlIndent[]), false, null, true))
+                console.log(util.inspect(excludeElement([indentStruct] as IlIndent[]), false, null, true))*/
             }
+
+            // first of availableRange
+            if (treeArray[innerArrayAR].lastElement === null) {
+                const indentStruct = compileFirstARRow()
+                treeArray[innerArrayAR].data = [[indentStruct]]
+                continue;
+            }
+
+            /*
+            range checking - row vs lastElement isadjacent
+            -> true = next level
+            -> false = change into lastElement && new push
+
+            min checking - min comparison; innerIndentSize's first size >= min
+            -> true = next level
+            -> false = change into lastElement && new push
+
+            min === innerIndentSize's first size && adjacentType checking
+            indent: x (o) / * > (x)
+            list: * x (o) / > (x)
+            cite: > (o) / * x (x)
+            -> true = next level
+            -> false = change into lastElement && new push
+
+            level checking
+            */
+
+            const beComparedRange = (treeArray[innerArrayAR].lastElement as IlElement).range
+            
+            if (!beComparedRange.isAdjacent(innerRange)) {
+                const indentStruct = compileFirstARRow();
+                treeArray[innerArrayAR].data = [[indentStruct], ...treeArray[innerArrayAR].data]
+                continue;
+            }
+
+            // in array
+            const firstRowElem = treeArray[innerArrayAR].data[0][0];
+            // innerArray's elem
+            const firstIndentSize = innerIndentSize[0].c;
+            const firstType = innerSequence[0];
+
+            if (!(firstIndentSize >= firstRowElem.count)) {
+                const indentStruct = compileFirstARRow();
+                treeArray[innerArrayAR].data = [[indentStruct], ...treeArray[innerArrayAR].data]
+                continue;
+            }
+
+            const indentDisallowed = firstRowElem.type === "Indent" && (firstType === "Cite" || /List/.test(firstType))
+            const citeDisallowed = firstRowElem.type === "Cite" && (firstType === "Indent" || /List/.test(firstType))
+            const listDisallowed = /List/.test(firstType) && (firstType === "Cite")
+            if (firstIndentSize === firstRowElem.count && (indentDisallowed || citeDisallowed || listDisallowed)) {
+                const indentStruct = compileFirstARRow();
+                treeArray[innerArrayAR].data = [[indentStruct], ...treeArray[innerArrayAR].data]
+                continue;
+            }
+
+            // todo below
+            /*
+             * > * > asdf
+             > > asdf
+            */
         }
     }
 }
