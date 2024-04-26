@@ -61,6 +61,7 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
 
         if (!bracketLock && subElem.type === "Newline") {
             rangeEnd = subElem.range.end;
+            break;
         }
     }
 
