@@ -1,16 +1,32 @@
-import { GroupperReturnType, ProcessorType } from ".";
-import { NamuMark } from "..";
-import { IlElement, IlIndent, IlStructureFollow } from "../elem";
-import { indentlikeProcessor } from "../processor/indentlike";
+import { TGroupperTuple, TProcessorMap } from "./index.js";
+import { indentlikeProcessor } from "../processor/indentlike.js";
+import { NamuMark } from "../index.js";
+import { IlElement, IlIndent } from "../elem.js";
+import { newIndentProcessor } from "../processor/newindent.js";
 
-const mappedProcessor: ProcessorType = {
-    "Newline>Cite": [ indentlikeProcessor ],
-    "Newline>Indent": [ indentlikeProcessor ]
+const mappedProcessor: TProcessorMap = {
+    "Newline>Cite": [ newIndentProcessor ],
+    "Newline>Indent": [ newIndentProcessor ]
+    // "Newline>Cite": [ indentlikeProcessor ],
+    // "Newline>Indent": [ indentlikeProcessor ]
 }
 
-const groupper = (mark: NamuMark) => {
-    const treeArray = mark.parserStore.indentlikeTreeArray
-    for (const [innerArrayAR, innerArray] of Object.entries(mark.parserStore.indentlikeArray)) {
+function _groupper(this: NamuMark) {
+    const treeArray = this.parserStore.indentlikeTreeArray;
+    for (const [rootArrayLR, rootArray] of Object.entries(this.parserStore.indentlikeArray)) {
+        if (treeArray[rootArrayLR] === undefined) {
+            treeArray[rootArrayLR] = { data: [], lastElement: null };
+        }
+        for (let index = 0; index < rootArray.length; index++) {
+            const subElem = rootArray[index];
+            const { data: subData, range: subRange, structure: { indentSize: subIndentSize, sequence: subSequence }, uuid: subUUID } = subElem;
+        }
+    }
+}
+
+function groupper(this: NamuMark) {
+    const treeArray = this.parserStore.indentlikeTreeArray
+    for (const [innerArrayAR, innerArray] of Object.entries(this.parserStore.indentlikeArray)) {
         if (treeArray[innerArrayAR] === undefined) {
             treeArray[innerArrayAR] = { data: [], lastElement: null };
         }
@@ -118,4 +134,4 @@ const groupper = (mark: NamuMark) => {
     }
 }
 
-export default [mappedProcessor, groupper] as GroupperReturnType
+export default [mappedProcessor, groupper] as TGroupperTuple

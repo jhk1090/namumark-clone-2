@@ -1,5 +1,10 @@
 import { NamuMark } from ".";
-import { HolderType } from "./elem";
+import util from "node:util"
+import { THolderTag } from "./elem";
+
+// const a = new NamuMark("## hello world")
+
+// console.log(util.inspect(a.parse(), false, 100, true))
 
 describe("List & Indent & Cite Testing", () => {
     test(" * > * asdf", () => {
@@ -8,7 +13,7 @@ describe("List & Indent & Cite Testing", () => {
 `;
         const mark = new NamuMark(text);
         const result = mark.parse().map((v) => v.type);
-        const expectedResult: HolderType[] = [
+        const expectedResult: THolderTag[] = [
             "Newline",
             "Newline",
             "Newline>Indent",
@@ -30,7 +35,7 @@ describe("List & Indent & Cite Testing", () => {
 
         const mark = new NamuMark(text);
         const result = mark.parse().map((v) => v.type);
-        const expectedResult: HolderType[] = [
+        const expectedResult: THolderTag[] = [
             "Newline",
             "Newline",
             "Newline>Indent",
@@ -52,7 +57,7 @@ describe("List & Indent & Cite Testing", () => {
 
         const mark = new NamuMark(text);
         const result = mark.parse().map((v) => v.type);
-        const expectedResult: HolderType[] = [
+        const expectedResult: THolderTag[] = [
             "Newline",
             "Newline",
             "Newline>Cite",
@@ -78,7 +83,7 @@ describe("Heading Overlapping Collision", () => {
         const mark = new NamuMark(text);
         const result = mark.parse().map((v) => v.type);
         console.log(result)
-        const expectedResult: HolderType[] = [
+        const expectedResult: THolderTag[] = [
             "Newline",
             "Newline",
             "TripleBracketOpen",

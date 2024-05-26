@@ -1,49 +1,49 @@
-import { GroupperReturnType, ProcessorType } from ".";
-import { NamuMark } from "..";
-import { footnoteCloseProcessor, footnoteOpenProcessor } from "../processor/footnote";
-import { Range } from "../utils";
+import { TGroupperTuple, TProcessorMap } from "./index.js";
+import { NamuMark } from "../index.js";
+import { footnoteCloseProcessor, footnoteOpenProcessor } from "../processor/footnote.js";
+import { Range } from "range-admin";
 
-const mappedProcessor: ProcessorType = {
+const mappedProcessor: TProcessorMap = {
     FootnoteOpen: [footnoteOpenProcessor],
     SquareBracketClose: [footnoteCloseProcessor],
 };
 
-const groupper = (mark: NamuMark) => {
-    for (let idx = 0; idx < mark.holderArray.length; idx++) {
-        mark.holderArray = mark.holderArray.filter((v) => {
-            if (v.ignore) {
-                v.group.forEach((group) => mark.removeGroup({ group }));
-                return false;
-            }
-            return true;
-        });
-        
-        const elem = mark.holderArray[idx];
-        if (elem.fixed) {
+function groupper(this: NamuMark) {
+    for (let idx = 0; idx < this.holderArray.length; idx++) {
+        const elem = this.holderArray[idx];
+        if (elem.immutable) {
             continue;
         }
 
-        const footnote = elem.group.find((v) => v.type === "Footnote");
-        if (footnote !== undefined) {
-            if (footnote.elems.length !== 3) {
-                mark.removeGroup({ group: footnote });
+        const footnoteGroup = elem.group.find((v) => v.type === "Footnote");
+        if (footnoteGroup !== undefined) {
+            if (footnoteGroup.elems.length !== 3) {
+                this.removeGroup({ group: footnoteGroup });
                 continue;
             }
 
-            const start = mark.holderArray.findIndex((v) => v.uuid === footnote.elems[1].uuid);
-            const end = mark.holderArray.findIndex((v) => v.uuid === footnote.elems[2].uuid);
-            const sliced = mark.holderArray
+            const start = this.holderArray.findIndex((v) => v.uuid === footnoteGroup.elems[1].uuid);
+            const end = this.holderArray.findIndex((v) => v.uuid === footnoteGroup.elems[2].uuid);
+            const sliced = this.holderArray
                 .slice(start, end + 1)
                 .toSpliced(0, 1)
                 .toSpliced(-1, 1);
             // console.log('footnote')
-            sliced.forEach((v) => (v.availableRange = new Range(mark.holderArray[start].range.end, mark.holderArray[end].range.start)));
+            sliced.forEach((v) => (v.layerRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start)));
         }
 
         for (const group of elem.group) {
-            group.elems.forEach((v) => (v.fixed = true));
+            group.elems.forEach((v) => (v.immutable = true));
         }
+
+        this.holderArray = this.holderArray.filter(v => {
+            if (v.ignore) {
+                v.group.forEach(group => this.removeGroup({ group }));
+                return false;
+            }
+            return true;
+        })
     }
 };
 
-export default [mappedProcessor, groupper] as GroupperReturnType
+export default [mappedProcessor, groupper] as TGroupperTuple

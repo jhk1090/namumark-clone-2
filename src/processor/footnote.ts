@@ -1,15 +1,15 @@
-import { NamuMark } from "..";
-import { ProcessorProps } from ".";
-import { Group } from "../elem";
+import { NamuMark } from "../index.js";
+import { IProcessorProps } from "./index.js";
+import { Group } from "../elem.js";
 
-export const footnoteOpenProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const footnoteQueue = mark.parserStore.footnoteQueue;
+export function footnoteOpenProcessor(this: NamuMark, props: IProcessorProps) {
+    const footnoteQueue = this.parserStore.footnoteQueue;
 
-    const elem = mark.holderArray[props.idx];
-    const prev = mark.holderArray[props.idx - 1];
+    const elem = this.holderArray[props.index];
+    const prev = this.holderArray[props.index - 1];
 
     // 이미 사용중
-    if (prev.fixed) {
+    if (prev.immutable) {
         return;
     }
 
@@ -21,12 +21,12 @@ export const footnoteOpenProcessor = (mark: NamuMark, props: ProcessorProps) => 
     footnoteQueue.push([prev, elem]);
 };
 
-export const footnoteCloseProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const footnoteQueue = mark.parserStore.footnoteQueue;
+export function footnoteCloseProcessor(this: NamuMark, props: IProcessorProps) {
+    const footnoteQueue = this.parserStore.footnoteQueue;
     
-    const elem = mark.holderArray[props.idx];
+    const elem = this.holderArray[props.index];
 
-    if (elem.fixed) {
+    if (elem.immutable) {
         return;
     }
 
@@ -36,9 +36,9 @@ export const footnoteCloseProcessor = (mark: NamuMark, props: ProcessorProps) =>
         return;
     }
 
-    if (!lastTuple[0].availableRange.isSame(elem.availableRange)) {
+    if (!lastTuple[0].layerRange.isEqual(elem.layerRange)) {
         return;
     }
 
-    mark.pushGroup({ group: new Group("Footnote"), elems: [...lastTuple, elem] });
+    this.pushGroup({ group: new Group("Footnote"), elems: [...lastTuple, elem] });
 };

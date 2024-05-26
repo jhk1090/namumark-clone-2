@@ -1,18 +1,18 @@
-import { GroupperReturnType, ProcessorType } from ".";
-import { NamuMark } from "..";
-import { BaseGroup, Group, HolderElem, HolderType } from "../elem";
-import { tableArgumentCloseProcessor, tableArgumentOpenProcessor, tableNewlineProcessor, tablePipeProcessor } from "../processor/table";
-import { Range } from "../utils";
+import { tableArgumentCloseProcessor, tableArgumentOpenProcessor, tableNewlineProcessor, tablePipeProcessor } from "../processor/table.js";
+import { BaseGroup, Group, HolderElem } from "../elem.js";
+import { NamuMark } from "../index.js";
+import { TGroupperTuple, TProcessorMap } from "./index.js";
+import { Range } from "range-admin";
 
-const mappedProcessor: ProcessorType = {
+const mappedProcessor: TProcessorMap = {
     Pipe: [tablePipeProcessor],
     Newline: [tableNewlineProcessor],
     TableArgumentOpen: [tableArgumentOpenProcessor],
     TableArgumentClose: [tableArgumentCloseProcessor]
 }
 
-const groupper = (mark: NamuMark) => {
-    const tableArray = mark.parserStore.tableArray;
+function groupper(this: NamuMark) {
+    const tableArray = this.parserStore.tableArray;
     for (const elem of Object.values(tableArray)) {
         if (elem.data.length === 0) {
             continue;
@@ -22,7 +22,7 @@ const groupper = (mark: NamuMark) => {
                 continue;
             }
 
-            mark.pushGroup({ group: new Group("TableRow"), elems: [ ...value.filter(v => v.group.find(v => v.type === "TableRow") === undefined) ] })
+            this.pushGroup({ group: new Group("TableRow"), elems: [ ...value.filter(v => v.group.find(v => v.type === "TableRow") === undefined) ] })
 
             const last = value.findLast(v => v.type === "Pipe")
             if (last === undefined) {
@@ -31,13 +31,13 @@ const groupper = (mark: NamuMark) => {
 
             let substrText = "";
             // global
-            if (last.availableRange.end === -999) {
-                substrText = mark.wikiText.substring(last.range.start, last.eolRange.end - 1);
+            if (last.layerRange.end === -999) {
+                substrText = this.wikiText.substring(last.range.start, last.rowRange.end - 1);
             } else {
-                if (last.eolRange.end - 1 > last.availableRange.end) {
-                    substrText = mark.wikiText.substring(last.range.start, last.availableRange.end)
+                if (last.rowRange.end - 1 > last.layerRange.end) {
+                    substrText = this.wikiText.substring(last.range.start, last.layerRange.end)
                 } else {
-                    substrText = mark.wikiText.substring(last.range.start, last.eolRange.end - 1);
+                    substrText = this.wikiText.substring(last.range.start, last.rowRange.end - 1);
                 }
             }
 
@@ -50,8 +50,8 @@ const groupper = (mark: NamuMark) => {
                         argumentGroups.push(argumentGroup)
                     }
                 })
-                argumentGroups.forEach(group => mark.removeGroup({ group }))
-                mark.removeGroup({ group: foundGroup })
+                argumentGroups.forEach(group => this.removeGroup({ group }))
+                this.removeGroup({ group: foundGroup })
             }
 
             const filtered = value.filter(v => v.group.find(v => v.type === "TableRow") !== undefined )
@@ -99,22 +99,22 @@ const groupper = (mark: NamuMark) => {
                     break;
                 }
 
-                const start = mark.holderArray.findIndex(v => v.uuid === cur[cur.length - 1].uuid)
-                const end = mark.holderArray.findIndex(v => v.uuid === next[0].uuid)
+                const start = this.holderArray.findIndex(v => v.uuid === cur[cur.length - 1].uuid)
+                const end = this.holderArray.findIndex(v => v.uuid === next[0].uuid)
                 boundaryIndexes.push([start, end])
             }
             
             boundaryIndexes.forEach((indexes) => {
-                const sliced = mark.holderArray.slice(indexes[0], indexes[1] + 1).filter(v => v.availableRange.isSame(new Range(-1000, -999))).toSpliced(0, 1).toSpliced(-1, 1);
-                sliced.forEach(v => v.availableRange = new Range(mark.holderArray[indexes[0]].range.end, mark.holderArray[indexes[1]].range.start))
+                const sliced = this.holderArray.slice(indexes[0], indexes[1] + 1).filter(v => v.layerRange.isEqual(new Range(-1000, -999))).toSpliced(0, 1).toSpliced(-1, 1);
+                sliced.forEach(v => v.layerRange = new Range(this.holderArray[indexes[0]].range.end, this.holderArray[indexes[1]].range.start))
             })
 
 
-            mark.pushGroup({ group: new Group("Table"), elems: [...filtered] })
+            this.pushGroup({ group: new Group("Table"), elems: [...filtered] })
         }
     }
 
     // 마지막이라서 grouping 할 필요 없음
 }
 
-export default [mappedProcessor, groupper] as GroupperReturnType
+export default [mappedProcessor, groupper] as TGroupperTuple

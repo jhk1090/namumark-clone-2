@@ -1,12 +1,12 @@
-import { NamuMark } from "..";
-import { ProcessorProps } from ".";
-import { Group } from "../elem";
-import { Range } from "../utils";
+import { NamuMark } from "../index.js";
+import { IProcessorProps } from "./index.js";
+import { Group } from "../elem.js";
+import { Range } from "range-admin";
 
-export const textDecorationProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const decoArray = mark.parserStore.decoArray;
+export function textDecorationProcessor(this: NamuMark, props: IProcessorProps) {
+    const decoArray = this.parserStore.decoArray;
 
-    const elem = mark.holderArray[props.idx];
+    const elem = this.holderArray[props.index];
     const elemType = elem.type as "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma";
 
     const adjDecoration = [elem];
@@ -14,7 +14,7 @@ export const textDecorationProcessor = (mark: NamuMark, props: ProcessorProps) =
     let lastRange: Range = elem.range;
     let decoCount = 1;
     const decoCountMax = elemType === "Quote" ? 3 : 2;
-    for (const subElem of mark.holderArray.slice(props.idx + 1)) {
+    for (const subElem of this.holderArray.slice(props.index + 1)) {
         if (decoCount === decoCountMax) {
             break;
         }
@@ -28,29 +28,29 @@ export const textDecorationProcessor = (mark: NamuMark, props: ProcessorProps) =
     }
 
     if (adjDecoration.length < 2) {
-        props.setIdx(props.idx + adjDecoration.length - 1);
+        props.setIndex(props.index + adjDecoration.length - 1);
         return;
     }
 
     if (elemType !== "Quote") {
         let referencedArray = decoArray[elemType];
 
-        if (referencedArray.length === 0 || !(referencedArray[0].eolRange.isSame(elem.eolRange)) || !(referencedArray[0].availableRange.isSame(elem.availableRange))) {
+        if (referencedArray.length === 0 || !(referencedArray[0].rowRange.isEqual(elem.rowRange)) || !(referencedArray[0].layerRange.isEqual(elem.layerRange))) {
             decoArray[elemType] = [...adjDecoration];
-            props.setIdx(props.idx + adjDecoration.length - 1);
+            props.setIndex(props.index + adjDecoration.length - 1);
             return;
         }
 
-        mark.pushGroup({ group: new Group(`Deco${elemType}`), elems: [...referencedArray, ...adjDecoration] });
+        this.pushGroup({ group: new Group(`Deco${elemType}`), elems: [...referencedArray, ...adjDecoration] });
         decoArray[elemType] = [];
 
-        props.setIdx(props.idx + adjDecoration.length - 1);
+        props.setIndex(props.index + adjDecoration.length - 1);
     } else {
         let referencedArray = decoArray[elemType];
 
-        if (referencedArray.length === 0 || !(referencedArray[0].eolRange.isSame(elem.eolRange)) || !(referencedArray[0].availableRange.isSame(elem.availableRange))) {
+        if (referencedArray.length === 0 || !(referencedArray[0].rowRange.isEqual(elem.rowRange)) || !(referencedArray[0].layerRange.isEqual(elem.layerRange))) {
             decoArray[elemType] = [...adjDecoration];
-            props.setIdx(props.idx + adjDecoration.length - 1);
+            props.setIndex(props.index + adjDecoration.length - 1);
             return;
         }
 
@@ -60,19 +60,19 @@ export const textDecorationProcessor = (mark: NamuMark, props: ProcessorProps) =
 
         if (referencedArray.length > adjDecoration.length) {
             // ''' asdf ''
-            mark.pushGroup({
+            this.pushGroup({
                 group: correspondedGroup,
                 elems: [...referencedArray.slice(Number(`-${adjDecoration.length}`)), ...adjDecoration],
             });
             decoArray[elemType] = [];
 
-            props.setIdx(props.idx + adjDecoration.length - 1);
+            props.setIndex(props.index + adjDecoration.length - 1);
         } else {
             // '' asdf '' || '' asdf '''
-            mark.pushGroup({ group: correspondedGroup, elems: [...referencedArray, ...adjDecoration.slice(0, referencedArray.length)] });
+            this.pushGroup({ group: correspondedGroup, elems: [...referencedArray, ...adjDecoration.slice(0, referencedArray.length)] });
             decoArray[elemType] = [];
 
-            props.setIdx(props.idx + referencedArray.length - 1);
+            props.setIndex(props.index + referencedArray.length - 1);
         }
     }
 };

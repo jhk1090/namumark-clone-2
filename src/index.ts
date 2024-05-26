@@ -1,30 +1,74 @@
-import { Range, seekEOL } from "./utils";
-import { BaseGroup, Elem, Group, GroupPropertySingleSquareBracketNameType, GroupType, HolderElem, HolderType, IIndent, IlIndent, parserStoreType, regexType } from "./elem";
-import firstGroupper from "./groupper/firstGroupper";
-import secondGroupper from "./groupper/secondGroupper";
-import thirdGroupper from "./groupper/thirdGroupper";
-import fourthGroupper from "./groupper/fourthGroupper";
-import { GroupperReturnType } from "./groupper";
-import { ProcessorProps } from "./processor";
-import fifthGroupper from "./groupper/fifthGroupper";
-import middleGroupper from "./groupper/middleGroupper";
-const util = require("node:util");
+import { TGroupperTuple } from "./groupper/index.js";
+import { BaseGroup, HolderElem, IIndent, IlElement, IlIndent, IlStructure, THolderTag } from "./elem.js";
+import { Range } from "range-admin";
+import { IProcessorProps } from "./processor/index.js";
+import firstGroupper from "./groupper/firstGroupper.js";
+import secondGroupper from "./groupper/secondGroupper.js";
+import thirdGroupper from "./groupper/thirdGroupper.js";
+import fourthGroupper from "./groupper/fourthGroupper.js";
+import util from "node:util"
+import middleGroupper from "./groupper/middleGroupper.js";
+
+function seekEOL(text: string, offset = 0) {
+    return text.indexOf("\n", offset);
+}
+
+interface IParserStore {
+    tripleBracketQueue: HolderElem[];
+    squareBracketArray: { value: HolderElem[]; max: number }[];
+    headingOpenElement?: HolderElem;
+    mathOpenElement?: HolderElem;
+    footnoteQueue: [HolderElem, HolderElem][];
+    decoArray: { [k in "Quote" | "Underbar" | "Hyphen" | "Tilde" | "Carot" | "Comma"]: HolderElem[] };
+    tableArray: {
+        [k: string]: {
+            indentSequence: { count: number; type: THolderTag }[] | null;
+            rowStartIndex: number;
+            argumentHolder: HolderElem | null;
+            isTableEnd: boolean;
+            data: HolderElem[][];
+        };
+    };
+    newIndentArray: { [k: string ]: { minIndentSize: number | null, dataArray: IIndent[][], indentStructures: IlStructure[][] } };
+    indentArray: { [k: string]: { min: number | null; lastNewlineUUID: string | null; data: IIndent[][] } };
+    indentlikeArray: { [k: string]: IlElement[] };
+    indentlikeTreeArray: { [k: string]: { data: IlIndent[][]; lastElement: IlElement | null} };
+}
 
 export class NamuMark {
-    wikiText: string = "";
+    wikiText: string;
     isRedirect: boolean = false;
-    wikiArray: Elem[] = [];
     holderArray: HolderElem[] = [];
     groupArray: BaseGroup[] = [];
     eolHolderArray: { range: Range; holders: HolderElem[] | null }[] = [];
-    headingLevelAt: number[] = [0, 0, 0, 0, 0, 0];
+    headingLevelArray: number[] = [0, 0, 0, 0, 0, 0];
+    parserStore: IParserStore = {
+        tripleBracketQueue: [],
+        squareBracketArray: [],
+        headingOpenElement: undefined,
+        mathOpenElement: undefined,
+        footnoteQueue: [],
+        decoArray: {
+            Quote: [],
+            Underbar: [],
+            Hyphen: [],
+            Tilde: [],
+            Carot: [],
+            Comma: [],
+        },
+        tableArray: {},
+        newIndentArray: {},
+        indentArray: {},
+        indentlikeArray: {},
+        indentlikeTreeArray: {},
+    };
 
     constructor(wikiText: string) {
-        // \n는 regex 방지용
-        this.wikiText = "\n" + wikiText + "\n";
+        // \n은 regex 방지용
+        this.wikiText = `\n${wikiText}\n`;
     }
 
-    pushGroup(props: { group: BaseGroup; elems: HolderElem[] }) {
+    public pushGroup(props: { group: BaseGroup; elems: HolderElem[] }) {
         props.group.elems.push(...props.elems);
         props.group.elems.sort((a, b) => a.range.start - b.range.start);
         for (const elem of props.elems) {
@@ -33,7 +77,7 @@ export class NamuMark {
         this.groupArray.push(props.group);
     }
 
-    removeGroup(props: { group: BaseGroup }) {
+    public removeGroup(props: { group: BaseGroup }) {
         const targetIndex = this.groupArray.findIndex((v) => v.uuid === props.group.uuid);
         if (targetIndex === -1) {
             return;
@@ -44,7 +88,7 @@ export class NamuMark {
         this.groupArray.splice(targetIndex, 1);
     }
 
-    processRedirect() {
+    private processRedirect() {
         const redirectRegex = /^\n#redirect ([^\n]+)/g;
         const match = redirectRegex.exec(this.wikiText);
         if (match !== null) {
@@ -52,7 +96,7 @@ export class NamuMark {
         }
     }
 
-    fillEolHolder() {
+    private fillEolHolder() {
         let offset = 0;
         while (true) {
             const result = seekEOL(this.wikiText, offset);
@@ -65,99 +109,103 @@ export class NamuMark {
         }
     }
 
-    evaluateHolder(arr: regexType) {
-        let [regex, type, offset] = arr;
-        let offsetStart = offset?.start ?? 0;
-        let offsetEnd = offset?.end ?? 0;
-        let offsetUseGroupStart = offset?.useGroupStart;
-        let offsetUseGroupEnd = offset?.useGroupEnd;
-
-        let match;
-
-        while ((match = regex.exec(this.wikiText)) !== null) {
-            if (offsetUseGroupStart !== undefined) {
-                offsetStart = match.groups?.[offsetUseGroupStart].length as number;
-            }
-            if (offsetUseGroupEnd !== undefined) {
-                offsetEnd = match.groups?.[offsetUseGroupEnd].length as number;
-            }
-
-            let target;
-            let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd);
-            for (const eol of this.eolHolderArray) {
-                if (targetRange.isContainedIn(eol.range)) {
-                    target = new HolderElem(targetRange, eol.range, type);
-                    if (eol.holders === null) {
-                        eol.holders = [target];
-                    } else {
-                        eol.holders.push(target);
-                    }
-                    break;
-                }
-            }
-            this.holderArray.push(target as HolderElem);
-        }
-    }
-
     collectHolderElem() {
-        const pipe: regexType = [/\|/g, "Pipe"];
-        const comment: regexType = [/\n##/g, "Comment", { start: 1 }];
-        const squareBracketOpen: regexType = [/\[/g, "SquareBracketOpen"];
-        const footnoteOpen: regexType = [/\[\*/g, "FootnoteOpen", { start: 1 }];
-        const squareBracketClose: regexType = [/\]/g, "SquareBracketClose"];
-        const macroArgumentOpen: regexType = [/\(/g, "ParenthesisOpen"];
-        const macroArgumentClose: regexType = [/\)/g, "ParenthesisClose"];
-        const headingOpen: regexType = [/\n={1,6}(#?) /g, "HeadingOpen", { start: 1 }];
-        const headingClose: regexType = [/ (#?)={1,6}\n/g, "HeadingClose", { end: -1 }];
-        const tripleBracketOpen: regexType = [/\{\{\{/g, "TripleBracketOpen"];
-        const tripleBracketClose: regexType = [/\}\}\}/g, "TripleBracketClose"];
+        interface IOffset {
+            start?: number;
+            end?: number;
+            useGroupStart?: string;
+            useGroupEnd?: string;
+        }
+        type TRegex = [RegExp, THolderTag, IOffset?];
 
-        const orderedListRegex = /(1|a|A|i|I)\.(\#\d{1,})?/
-        const unorderedListRegex = /\*/
+        const evaluateHolder = (regexArray: TRegex) => {
+            let [regex, type, offset] = regexArray;
+            let offsetStart = offset?.start ?? 0;
+            let offsetEnd = offset?.end ?? 0;
+            let offsetUseGroupStart = offset?.useGroupStart;
+            let offsetUseGroupEnd = offset?.useGroupEnd;
+
+            let match;
+
+            while ((match = regex.exec(this.wikiText)) !== null) {
+                if (offsetUseGroupStart !== undefined) {
+                    offsetStart = match.groups?.[offsetUseGroupStart].length as number;
+                }
+                if (offsetUseGroupEnd !== undefined) {
+                    offsetEnd = match.groups?.[offsetUseGroupEnd].length as number;
+                }
+
+                let target;
+                let targetRange = new Range(match.index + offsetStart, regex.lastIndex + offsetEnd);
+                for (const eol of this.eolHolderArray) {
+                    if (targetRange.isContainedIn(eol.range)) {
+                        target = new HolderElem(targetRange, eol.range, type);
+                        if (eol.holders === null) {
+                            eol.holders = [target];
+                        } else {
+                            eol.holders.push(target);
+                        }
+                        break;
+                    }
+                }
+                this.holderArray.push(target as HolderElem);
+            }
+        };
+
+        const pipe: TRegex = [/\|/g, "Pipe"];
+        const comment: TRegex = [/\n##/g, "Comment", { start: 1 }];
+        const squareBracketOpen: TRegex = [/\[/g, "SquareBracketOpen"];
+        const footnoteOpen: TRegex = [/\[\*/g, "FootnoteOpen", { start: 1 }];
+        const squareBracketClose: TRegex = [/\]/g, "SquareBracketClose"];
+        const macroArgumentOpen: TRegex = [/\(/g, "ParenthesisOpen"];
+        const macroArgumentClose: TRegex = [/\)/g, "ParenthesisClose"];
+        const headingOpen: TRegex = [/\n={1,6}(#?) /g, "HeadingOpen", { start: 1 }];
+        const headingClose: TRegex = [/ (#?)={1,6}\n/g, "HeadingClose", { end: -1 }];
+        const tripleBracketOpen: TRegex = [/\{\{\{/g, "TripleBracketOpen"];
+        const tripleBracketClose: TRegex = [/\}\}\}/g, "TripleBracketClose"];
+
+        const orderedListRegex = /(1|a|A|i|I)\.(\#\d{1,})?/;
+        const unorderedListRegex = /\*/;
         const listRegex = new RegExp(`(${unorderedListRegex.source}|${orderedListRegex.source})`);
 
-        const newline_indent: regexType = [/\n( ){1,}/g, "Newline>Indent", { start: 1 }];
-        const cite_indent: regexType = [new RegExp(`(?<head>\>)( ){1,}`, "g"), "Cite>Indent", { useGroupStart: "head" }];
-        const list_indent: regexType = [new RegExp(`(?<head>${listRegex.source})( ){1,}`, "g"), "List>Indent", { useGroupStart: "head" }];
+        const newline_indent: TRegex = [/\n( ){1,}/g, "Newline>Indent", { start: 1 }];
+        const cite_indent: TRegex = [new RegExp(`(?<head>\>)( ){1,}`, "g"), "Cite>Indent", { useGroupStart: "head" }];
+        const list_indent: TRegex = [new RegExp(`(?<head>${listRegex.source})( ){1,}`, "g"), "List>Indent", { useGroupStart: "head" }];
 
-        const indent_unorderedList: regexType = [
+        const indent_unorderedList: TRegex = [
             new RegExp(`(?<head>( ){1,})${unorderedListRegex.source}`, "g"),
             "Indent>UnorderedList",
             { useGroupStart: "head" },
         ]; // x*
-        const indent_orderedList: regexType = [
+        const indent_orderedList: TRegex = [
             new RegExp(`(?<head>( ){1,})${orderedListRegex.source}`, "g"),
             "Indent>OrderedList",
             { useGroupStart: "head" },
         ]; // x1.
-        const cite_unorderedList: regexType = [
-            new RegExp(`(?<head>\>)${unorderedListRegex.source}`, "g"),
-            "Cite>UnorderedList",
-            { useGroupStart: "head" },
-        ]; // >*
-        const cite_orderedList: regexType = [
-            new RegExp(`(?<head>\>)${orderedListRegex.source}`, "g"),
-            "Cite>OrderedList",
-            { useGroupStart: "head" },
-        ]; // >1.
+        // const cite_unorderedList: TRegex = [
+        //     new RegExp(`(?<head>\>)${unorderedListRegex.source}`, "g"),
+        //     "Cite>UnorderedList",
+        //     { useGroupStart: "head" },
+        // ]; // >*
+        // const cite_orderedList: TRegex = [new RegExp(`(?<head>\>)${orderedListRegex.source}`, "g"), "Cite>OrderedList", { useGroupStart: "head" }]; // >1.
 
-        const newline_cite: regexType = [/(?<head>\n)\>/g, "Newline>Cite", { useGroupStart: "head"}] //\n>
-        const indent_cite: regexType = [new RegExp('(?<head>( ){1,})\>', "g"), "Indent>Cite", { useGroupStart: "head" }]; // x>
-        const cite_cite: regexType = [new RegExp(`(?<head>\>)\>`, "g"), "Cite>Cite", { useGroupStart: "head" }]; // >>
-        const list_cite: regexType = [new RegExp(`(?<head>${listRegex.source})\>`, "g"), "List>Cite", { useGroupStart: "head" }]; // *>
+        const newline_cite: TRegex = [/(?<head>\n)\>/g, "Newline>Cite", { useGroupStart: "head" }]; //\n>
+        const indent_cite: TRegex = [new RegExp("(?<head>( ){1,})>", "g"), "Indent>Cite", { useGroupStart: "head" }]; // x>
+        const cite_cite: TRegex = [new RegExp(`(?<head>\>)\>`, "g"), "Cite>Cite", { useGroupStart: "head" }]; // >>
+        const list_cite: TRegex = [new RegExp(`(?<head>${listRegex.source})\>`, "g"), "List>Cite", { useGroupStart: "head" }]; // *>
 
-        const tableArgumentOpen: regexType = [/(\||\>)\</g, "TableArgumentOpen", { start: 1 }];
-        const tableArgumentClose: regexType = [/(\w{1})\>/g, "TableArgumentClose", { start: 1 }];
-        const mathTagOpen: regexType = [/\<math\>/g, "MathTagOpen"];
-        const mathTagClose: regexType = [/\<\/math\>/g, "MathTagClose"];
-        const quote: regexType = [/\'/g, "Quote"];
-        const underbar: regexType = [/\_/g, "Underbar"];
-        const tilde: regexType = [/\~/g, "Tilde"];
-        const carot: regexType = [/\^/g, "Carot"];
-        const comma: regexType = [/\,/g, "Comma"];
-        const hyphen: regexType = [/\-/g, "Hyphen"];
-        const escape: regexType = [/\\/g, "Escape"];
-        const newline: regexType = [/[\n]/g, "Newline"];
+        const tableArgumentOpen: TRegex = [/(\||\>)\</g, "TableArgumentOpen", { start: 1 }];
+        const tableArgumentClose: TRegex = [/(\w{1})\>/g, "TableArgumentClose", { start: 1 }];
+        const mathTagOpen: TRegex = [/\<math\>/g, "MathTagOpen"];
+        const mathTagClose: TRegex = [/\<\/math\>/g, "MathTagClose"];
+        const quote: TRegex = [/\'/g, "Quote"];
+        const underbar: TRegex = [/\_/g, "Underbar"];
+        const tilde: TRegex = [/\~/g, "Tilde"];
+        const carot: TRegex = [/\^/g, "Carot"];
+        const comma: TRegex = [/\,/g, "Comma"];
+        const hyphen: TRegex = [/\-/g, "Hyphen"];
+        const escape: TRegex = [/\\/g, "Escape"];
+        const newline: TRegex = [/[\n]/g, "Newline"];
 
         const evaluators = [
             pipe,
@@ -176,8 +224,8 @@ export class NamuMark {
             list_indent,
             indent_unorderedList,
             indent_orderedList,
-            cite_unorderedList,
-            cite_orderedList,
+            // cite_unorderedList,
+            // cite_orderedList,
             newline_cite,
             indent_cite,
             cite_cite,
@@ -197,52 +245,28 @@ export class NamuMark {
         ];
 
         for (const evaluator of evaluators) {
-            this.evaluateHolder(evaluator);
+            evaluateHolder(evaluator);
         }
 
-        
         this.holderArray.sort((a, b) => a.range.start - b.range.start);
     }
 
-    parserStore: parserStoreType = {
-        tripleBracketQueue: [],
-        squareBracketArray: [],
-        headingOpenElement: undefined,
-        mathOpenElement: undefined,
-        footnoteQueue: [],
-        decoArray: {
-            Quote: [],
-            Underbar: [],
-            Hyphen: [],
-            Tilde: [],
-            Carot: [],
-            Comma: [],
-        },
-        tableArray: {},
-        indentArray: {},
-        indentlikeArray: {},
-        indentlikeTreeArray: {}
-    };
-
     doParsing() {
-        const processorTuple: GroupperReturnType[] = [firstGroupper, middleGroupper, secondGroupper, thirdGroupper, fourthGroupper, fifthGroupper];
+        const groupperTuple: TGroupperTuple[] = [firstGroupper, middleGroupper, secondGroupper, thirdGroupper, fourthGroupper];
 
-        for (const [currentMappedProcessor, currentGrouping] of processorTuple) {
-            for (let idx = 0; idx < this.holderArray.length; idx++) {
-                const elem = this.holderArray[idx];
-                const props: ProcessorProps = { idx, setIdx: (v: number) => (idx = v) };
-                const currentProcessor = currentMappedProcessor[elem.type];
-                if (currentProcessor !== undefined) {
-                    for (const processor of currentProcessor) {
-                        processor(this, props);
+        for (const [mappedProcessor, groupper] of groupperTuple) {
+            for (let index = 0; index < this.holderArray.length; index++) {
+                const elem = this.holderArray[index];
+                const props: IProcessorProps = { index, setIndex: (value: number) => (index = value) };
+                const targetProcessors = mappedProcessor[elem.type];
+                if (targetProcessors !== undefined) {
+                    for (const targetProcessor of targetProcessors) {
+                        targetProcessor.call(this, props);
                     }
                     continue;
                 }
             }
-            const m = currentGrouping.name;
-            console.time(m);
-            currentGrouping(this);
-            console.timeEnd(m);
+            groupper.call(this);
             this.holderArray = this.holderArray.filter((v) => {
                 if (v.ignore) {
                     v.group.forEach((group) => this.removeGroup({ group }));
@@ -251,37 +275,25 @@ export class NamuMark {
                 return true;
             });
         }
-        /* logging */
-        console.log(
-            util.inspect(
-                this.holderArray.map((v) => {
-                    return { range: v.range.toString(), type: v.type, group: v.group.map(v => { return [v.type, v.uuid.substring(0, 4)]}) };
-                }),
-                false,
-                3,
-                true
-            )
-        );
 
-        // function excludeElement(array: IlIndent[]) {
-        //     interface ModifiedIIndent {
-        //         t: "x" | ">" | "*" | "1#" | "1";
-        //         c: number;
-        //         d: ModifiedIIndent[];
-        //     }
-        //     const output: ModifiedIIndent[] = [];
-        //     for (let element of array) {
-        //         let t: "x" | ">" | "*" | "1#" | "1" = element.type === "Indent" ? "x" : element.type === "Cite" ? ">" : element.type === "UnorderedList" ? "*" : element.type.startsWith("OrderedList-Ordered") ? "1#" : "1";
-        //         output.push({ t: t, c: element.count, d: excludeElement(element.children) })
-        //     }
-        //     return output;
-        // }
-        // for (const [key, value] of Object.entries(this.parserStore.indentlikeTreeArray)) {
-        //     console.log(key)
-        //     console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
-        // }
-        // console.log(util.inspect(this.parserStore.indentlikeTreeArray, false, 5, true))
-        /* logging */
+        function excludeElement(array: IlIndent[]) {
+            interface ModifiedIIndent {
+                t: "x" | ">" | "*" | "1#" | "1";
+                c: number;
+                d: ModifiedIIndent[];
+            }
+            const output: ModifiedIIndent[] = [];
+            for (let element of array) {
+                let t: "x" | ">" | "*" | "1#" | "1" = element.type === "Indent" ? "x" : element.type === "Cite" ? ">" : element.type === "UnorderedList" ? "*" : element.type.startsWith("OrderedList-Ordered") ? "1#" : "1";
+                output.push({ t: t, c: element.count, d: excludeElement(element.children) })
+            }
+            return output;
+        }
+        for (const [key, value] of Object.entries(this.parserStore.indentlikeTreeArray)) {
+            console.log(key)
+            console.log(util.inspect(value.data.map(v => excludeElement(v)), false, 10, true))
+        }
+        console.log(util.inspect(this.parserStore.indentlikeTreeArray, false, 4, true))
     }
 
     parse() {

@@ -1,25 +1,23 @@
-import { NamuMark } from "..";
-import { ProcessorProps } from ".";
-import { Group } from "../elem";
+import { Group } from "../elem.js";
+import { NamuMark } from "../index.js";
+import { IProcessorProps } from "./index.js";
 
-export const tripleBracketOpenProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const tripleBracketQueue = mark.parserStore.tripleBracketQueue;
+export function tripleBracketOpenProcessor(this: NamuMark, props: IProcessorProps) {
+    const tripleBracketQueue = this.parserStore.tripleBracketQueue;
+    const elem = this.holderArray[props.index];
 
-    const elem = mark.holderArray[props.idx];
     tripleBracketQueue.push(elem);
-};
+}
 
-export const tripleBracketCloseProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const tripleBracketQueue = mark.parserStore.tripleBracketQueue;
+export function tripleBracketCloseProcessor(this: NamuMark, props: IProcessorProps) {
+    const tripleBracketQueue = this.parserStore.tripleBracketQueue;
+    const elem = this.holderArray[props.index];
+    const lastBracket = tripleBracketQueue.pop();
 
-    const elem = mark.holderArray[props.idx];
-    const lastItem = tripleBracketQueue.pop();
-
-    if (lastItem === undefined) {
-        // elem.ignore = true;
+    if (lastBracket === undefined) {
         return;
     }
 
-    const group = new Group(lastItem.group.find((v) => v.type === "TripleBracketContent") ? "TripleBracketContent" : "TripleBracket");
-    mark.pushGroup({ group, elems: [lastItem, elem] });
-};
+    const group = new Group(lastBracket.group.find(v => v.type === "TripleBracketContent") ? "TripleBracketContent" : "TripleBracket");
+    this.pushGroup({ group, elems: [lastBracket, elem] })
+}

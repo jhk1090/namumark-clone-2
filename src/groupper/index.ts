@@ -1,7 +1,6 @@
-import { NamuMark } from "..";
-import { HolderElem, HolderType } from "../elem";
-import { ProcessorProps } from "../processor";
+import { THolderTag } from "../elem"
+import { IProcessorProps } from "../processor/index"
 
-export type ProcessorType = { [k in HolderType]?: ((mark: NamuMark, props: ProcessorProps) => void)[] };
+export type TProcessorMap = { [k in THolderTag]?: ((props: IProcessorProps) => void)[] };
 
-export type GroupperReturnType = [ProcessorType, (mark: NamuMark) => void]
+export type TGroupperTuple = [TProcessorMap, () => void]

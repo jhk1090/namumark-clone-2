@@ -1,53 +1,53 @@
-import { NamuMark } from "..";
-import { ProcessorProps } from ".";
-import { Group, HolderType } from "../elem";
+import { NamuMark } from "../index.js";
+import { IProcessorProps } from "./index.js";
+import { Group, THolderTag } from "../elem.js";
 
-export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const tableArray = mark.parserStore.tableArray;
+export function tablePipeProcessor(this: NamuMark, props: IProcessorProps) {
+    const tableArray = this.parserStore.tableArray;
 
-    const elem = mark.holderArray[props.idx];
-    const next = mark.holderArray[props.idx + 1];
+    const elem = this.holderArray[props.index];
+    const next = this.holderArray[props.index + 1];
     if (next.type !== "Pipe") {
         return;
     }
     
-    const adjNext = mark.wikiText[next.range.end];
+    const adjNext = this.wikiText[next.range.end];
     const adjPipe = [elem, next]
-    const currentTable = tableArray[elem.availableRange.toString()]
+    const currentTable = tableArray[elem.layerRange.toString()]
 
     if (currentTable === undefined || currentTable.data[0].length === 0) {
-        if (mark.wikiText.substring(elem.eolRange.start, elem.range.end).trim() !== "|") {
-            props.setIdx(props.idx + adjPipe.length - 1);
+        if (this.wikiText.substring(elem.rowRange.start, elem.range.end).trim() !== "|") {
+            props.setIndex(props.index + adjPipe.length - 1);
             return;
         }              
     }
 
     if (currentTable === undefined) {
         // if (adjNext !== "\n") {
-        const precedeEndlineIndex = mark.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
+        const precedeEndlineIndex = this.holderArray.slice(0, props.index).findLastIndex(v => v.type === "Newline");
+        const indents = this.holderArray.slice(precedeEndlineIndex, props.index).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
         const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
-        tableArray[elem.availableRange.toString()] = {indentSequence, rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
+        tableArray[elem.layerRange.toString()] = {indentSequence, rowStartIndex: 0, data: [[...adjPipe]], isTableEnd: false, argumentHolder: null}
         // }
-        props.setIdx(props.idx + adjPipe.length - 1);
+        props.setIndex(props.index + adjPipe.length - 1);
         return;
     }
 
     if (currentTable.data[0].length === 0) {
-        const precedeEndlineIndex = mark.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
+        const precedeEndlineIndex = this.holderArray.slice(0, props.index).findLastIndex(v => v.type === "Newline");
+        const indents = this.holderArray.slice(precedeEndlineIndex, props.index).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
         const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
-        tableArray[elem.availableRange.toString()].indentSequence = indentSequence;
+        tableArray[elem.layerRange.toString()].indentSequence = indentSequence;
     }
 
     if (currentTable.isTableEnd) {
-        const precedeEndlineIndex = mark.holderArray.slice(0, props.idx).findLastIndex(v => v.type === "Newline");
-        const indents = mark.holderArray.slice(precedeEndlineIndex, props.idx).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
+        const precedeEndlineIndex = this.holderArray.slice(0, props.index).findLastIndex(v => v.type === "Newline");
+        const indents = this.holderArray.slice(precedeEndlineIndex, props.index).filter(v => v.type === "Newline>Indent" || v.type === "Cite>Indent" || v.type === "List>Indent");
         const indentSequence = indents.map(v => { return {count: v.range.end - v.range.start, type: v.type} }) ?? [];
 
-        const isSequenceEqual = (x: {count: number; type: HolderType}[], y: {count: number; type: HolderType}[]) => {
+        const isSequenceEqual = (x: {count: number; type: THolderTag}[], y: {count: number; type: THolderTag}[]) => {
             if (x.length === 0 && y.length === 0) {
                 return true;
             }
@@ -118,67 +118,67 @@ export const tablePipeProcessor = (mark: NamuMark, props: ProcessorProps) => {
         }
 
         if (isSequenceEqual([...indentSequence], [...(currentTable.indentSequence ?? [])])) {
-            tableArray[elem.availableRange.toString()].rowStartIndex = currentTable.data[0].length;
+            tableArray[elem.layerRange.toString()].rowStartIndex = currentTable.data[0].length;
             currentTable.isTableEnd = false;
         } else {
-            tableArray[elem.availableRange.toString()] = { indentSequence, data: [[...adjPipe], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
-            props.setIdx(props.idx + adjPipe.length - 1);
+            tableArray[elem.layerRange.toString()] = { indentSequence, data: [[...adjPipe], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
+            props.setIndex(props.index + adjPipe.length - 1);
             return;
         }
     }
 
-    const start = mark.holderArray.findIndex(v => v.uuid === currentTable.data[0].at(-1)?.uuid);
-    const end = mark.holderArray.findIndex(v => v.uuid === adjPipe[0].uuid);
-    const sliced = mark.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1);
+    const start = this.holderArray.findIndex(v => v.uuid === currentTable.data[0].at(-1)?.uuid);
+    const end = this.holderArray.findIndex(v => v.uuid === adjPipe[0].uuid);
+    const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1);
     const filteredSliced = sliced.filter(v => v.group.find(v => v.type === "Heading") !== undefined);
     if (filteredSliced.length === 0) {
-        tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
+        tableArray[elem.layerRange.toString()].data[0].push(...adjPipe)
     } else {
         // ||<asdf> ||
         const lastPipeIndex = currentTable.data[0].findLastIndex(v => v.type === "Pipe") - 1
         const found = currentTable.data[0].slice(lastPipeIndex).find(v => v.type === "TableArgumentOpen")
         if (found !== undefined) {
-            mark.removeGroup({ group: found.group.find((v) => v.type === "TableArgument") as Group<"TableArgument"> });
+            this.removeGroup({ group: found.group.find((v) => v.type === "TableArgument") as Group<"TableArgument"> });
         }
 
-        tableArray[elem.availableRange.toString()].data[0] = currentTable.data[0].slice(0, lastPipeIndex)
-        tableArray[elem.availableRange.toString()].data[0].push(...adjPipe)
+        tableArray[elem.layerRange.toString()].data[0] = currentTable.data[0].slice(0, lastPipeIndex)
+        tableArray[elem.layerRange.toString()].data[0].push(...adjPipe)
     }
-    props.setIdx(props.idx + adjPipe.length - 1);
+    props.setIndex(props.index + adjPipe.length - 1);
     return;
 }    
-export const tableNewlineProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const tableArray = mark.parserStore.tableArray;
+export function tableNewlineProcessor(this: NamuMark, props: IProcessorProps) {
+    const tableArray = this.parserStore.tableArray;
 
-    const prev = mark.holderArray[props.idx - 1];
-    const elem = mark.holderArray[props.idx];
+    const prev = this.holderArray[props.index - 1];
+    const elem = this.holderArray[props.index];
     if (prev === undefined) {
         return;
     }
 
-    const currentTable = tableArray[elem.availableRange.toString()]
+    const currentTable = tableArray[elem.layerRange.toString()]
     if (currentTable === undefined || currentTable.data[0].length === 0) {
         return;
     }
 
     if (currentTable.isTableEnd) {
-        tableArray[elem.availableRange.toString()] = { indentSequence: null, data: [[], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
+        tableArray[elem.layerRange.toString()] = { indentSequence: null, data: [[], ...currentTable.data], rowStartIndex: 0, isTableEnd: false, argumentHolder: null }
         return;
     }
 
     if (!(currentTable.data[0].slice(currentTable.rowStartIndex).length === 2 && currentTable.data[0].length === 2) && prev.type === "Pipe" && prev.range.isAdjacent(elem.range)) {
-        mark.pushGroup({group: new Group("TableRow"), elems: [ ...currentTable.data[0].slice(currentTable.rowStartIndex) ]})
-        tableArray[elem.availableRange.toString()].isTableEnd = true;
+        this.pushGroup({group: new Group("TableRow"), elems: [ ...currentTable.data[0].slice(currentTable.rowStartIndex) ]})
+        tableArray[elem.layerRange.toString()].isTableEnd = true;
         return;
     }
 }
 
-export const tableArgumentOpenProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const tableArray = mark.parserStore.tableArray;
+export function tableArgumentOpenProcessor(this: NamuMark, props: IProcessorProps) {
+    const tableArray = this.parserStore.tableArray;
 
-    const elem = mark.holderArray[props.idx];
+    const elem = this.holderArray[props.index];
 
-    const currentTable = tableArray[elem.availableRange.toString()]
+    const currentTable = tableArray[elem.layerRange.toString()]
     if (currentTable === undefined || currentTable.data[0].length === 0) {
         return;
     }
@@ -188,32 +188,32 @@ export const tableArgumentOpenProcessor = (mark: NamuMark, props: ProcessorProps
         if (argumentHolder !== null && !argumentHolder.range.isAdjacent(elem.range)) {
             return;
         }
-        tableArray[elem.availableRange.toString()].argumentHolder = elem;
+        tableArray[elem.layerRange.toString()].argumentHolder = elem;
         return;
     }
 
-    tableArray[elem.availableRange.toString()].argumentHolder = null;
+    tableArray[elem.layerRange.toString()].argumentHolder = null;
     return;
 }
 
-export const tableArgumentCloseProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const tableArray = mark.parserStore.tableArray;
+export function tableArgumentCloseProcessor(this: NamuMark, props: IProcessorProps) {
+    const tableArray = this.parserStore.tableArray;
     
-    const elem = mark.holderArray[props.idx];
+    const elem = this.holderArray[props.index];
 
-    const currentTable = tableArray[elem.availableRange.toString()]
+    const currentTable = tableArray[elem.layerRange.toString()]
     if (currentTable === undefined || currentTable.data[0].length === 0) {
         return;
     }
 
     const argumentHolder = currentTable.argumentHolder;
     if (argumentHolder === null || argumentHolder.type === "TableArgumentClose") {
-        tableArray[elem.availableRange.toString()].argumentHolder = null;
+        tableArray[elem.layerRange.toString()].argumentHolder = null;
         return;
     }
 
     const argument = [argumentHolder, elem]
-    mark.pushGroup({ group: new Group("TableArgument"), elems: [...argument] })
-    tableArray[elem.availableRange.toString()].data[0].push(...argument)
-    tableArray[elem.availableRange.toString()].argumentHolder = null;
+    this.pushGroup({ group: new Group("TableArgument"), elems: [...argument] })
+    tableArray[elem.layerRange.toString()].data[0].push(...argument)
+    tableArray[elem.layerRange.toString()].argumentHolder = null;
 }

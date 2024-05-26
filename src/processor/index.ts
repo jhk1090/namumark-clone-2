@@ -1,4 +1,4 @@
-export interface ProcessorProps {
-    idx: number;
-    setIdx: (v: number) => void;
+export interface IProcessorProps {
+    index: number;
+    setIndex: (value: number) => void;
 }

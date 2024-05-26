@@ -1,10 +1,10 @@
-import { GroupperReturnType, ProcessorType } from ".";
-import { NamuMark } from "..";
-import { BaseGroup, Group, GroupType } from "../elem";
-import { textDecorationProcessor } from "../processor/textDecoration";
-import { Range } from "../utils";
+import { textDecorationProcessor } from "../processor/textDecoration.js";
+import { Range } from "range-admin";
+import { TGroupperTuple, TProcessorMap } from "./index.js";
+import { NamuMark } from "../index.js";
+import { BaseGroup, Group, TGroupTag } from "../elem.js";
 
-const mappedProcessor: ProcessorType = {
+const mappedProcessor: TProcessorMap = {
     Quote: [textDecorationProcessor],
     Underbar: [textDecorationProcessor],
     Tilde: [textDecorationProcessor],
@@ -12,22 +12,14 @@ const mappedProcessor: ProcessorType = {
     Comma: [textDecorationProcessor],
     Hyphen: [textDecorationProcessor],
 };
-const groupper = (mark: NamuMark) => {
-    for (let idx = 0; idx < mark.holderArray.length; idx++) {
-        mark.holderArray = mark.holderArray.filter((v) => {
-            if (v.ignore) {
-                v.group.forEach((group) => mark.removeGroup({ group }));
-                return false;
-            }
-            return true;
-        });
-        
-        const elem = mark.holderArray[idx];
-        if (elem.fixed) {
+function groupper(this: NamuMark) {
+    for (let idx = 0; idx < this.holderArray.length; idx++) {
+        const elem = this.holderArray[idx];
+        if (elem.immutable) {
             continue;
         }
 
-        const groupTokens: GroupType[] = [
+        const groupTokens: TGroupTag[] = [
             "DecoUnderbar",
             "DecoTilde",
             "DecoCarot",
@@ -40,18 +32,18 @@ const groupper = (mark: NamuMark) => {
 
         for (const group of filteredGroup) {
             if (group.type === "DecoTripleQuote" && group.elems.length !== 6) {
-                mark.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group<"DecoTripleQuote"> });
+                this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as Group<"DecoTripleQuote"> });
                 continue;
             }
             if (group.type !== "DecoTripleQuote" && group.elems.length !== 4) {
-                mark.removeGroup({ group: elem.group.find((v) => v.type === group.type) as BaseGroup });
+                this.removeGroup({ group: elem.group.find((v) => v.type === group.type) as BaseGroup });
                 continue;
             }
             const startLocation = group.type === "DecoTripleQuote" ? 2 : 1;
             const endLocation = group.type === "DecoTripleQuote" ? 3 : 2;
-            const start = mark.holderArray.findIndex((v) => v.uuid === group.elems[startLocation].uuid);
-            const end = mark.holderArray.findIndex((v) => v.uuid === group.elems[endLocation].uuid);
-            const sliced = mark.holderArray
+            const start = this.holderArray.findIndex((v) => v.uuid === group.elems[startLocation].uuid);
+            const end = this.holderArray.findIndex((v) => v.uuid === group.elems[endLocation].uuid);
+            const sliced = this.holderArray
                 .slice(start, end + 1)
                 .toSpliced(0, 1)
                 .toSpliced(-1, 1);
@@ -60,15 +52,23 @@ const groupper = (mark: NamuMark) => {
                 if (v.group.filter((v) => groupTokens.includes(v.type)).length !== 0) {
                     v.ignore = true;
                 } else {
-                    v.availableRange = new Range(mark.holderArray[start].range.end, mark.holderArray[end].range.start)
+                    v.layerRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start)
                 }
             });
         }
 
         for (const group of elem.group) {
-            group.elems.forEach((v) => (v.fixed = true));
+            group.elems.forEach((v) => (v.immutable = true));
         }
+
+        this.holderArray = this.holderArray.filter(v => {
+            if (v.ignore) {
+                v.group.forEach(group => this.removeGroup({ group }));
+                return false;
+            }
+            return true;
+        })
     }
 };
 
-export default [mappedProcessor, groupper] as GroupperReturnType
+export default [mappedProcessor, groupper] as TGroupperTuple

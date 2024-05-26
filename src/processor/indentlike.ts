@@ -1,16 +1,16 @@
-import { ProcessorProps } from ".";
-import { NamuMark } from "..";
-import { IlStructure, IlStructureFollow, IlStructurePrecede } from "../elem";
-import { Range } from "../utils";
+import { NamuMark } from "../index.js";
+import { IProcessorProps } from "./index.js";
+import { Group, IlStructure, IlStructurePrecede } from "../elem.js";
 import { v4 as uuidv4 } from "uuid";
+import { Range } from "range-admin";
 
-export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
-    const innerArray = mark.parserStore.indentlikeArray;
+export function indentlikeProcessor(this: NamuMark, props: IProcessorProps) {
+    const innerArray = this.parserStore.indentlikeArray;
 
-    const elem = mark.holderArray[props.idx];
-    const INNER_AR = elem.availableRange.toString();
+    const elem = this.holderArray[props.index];
+    const INNER_AR = elem.layerRange.toString();
 
-    if (elem.ignore || elem.fixed) {
+    if (elem.ignore || elem.immutable) {
         return;
     }
 
@@ -37,8 +37,8 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
     };
 
     let bracketLock = false;
-    let rangeEnd = elem.availableRange.end;
-    const slicedArray = INNER_AR === "Range(-1000, -999)" ? mark.holderArray.slice(props.idx + 1) : mark.holderArray.slice(props.idx + 1, mark.holderArray.findLastIndex(v => v.availableRange.isSame(elem.availableRange)))
+    let rangeEnd = elem.layerRange.end;
+    const slicedArray = INNER_AR === "-1000~-999" ? this.holderArray.slice(props.index + 1) : this.holderArray.slice(props.index + 1, this.holderArray.findLastIndex(v => v.layerRange.isEqual(elem.layerRange)))
 
     for (let i = 0; i < slicedArray.length - 1; i++) {
         const subElem = slicedArray[i];
@@ -73,7 +73,7 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
     adjacentIndentlike.forEach(v => {
         const [precede, follow] = v.type.split(">") as [IlStructurePrecede, FollowType];
         if (follow === "OrderedList") {
-            const { suffix, isOrdered } = followRegex.exec(mark.wikiText.substring(v.range.start, v.range.end))?.groups as { suffix: "1" | "a" | "A" | "i" | "I", isOrdered?: string }
+            const { suffix, isOrdered } = followRegex.exec(this.wikiText.substring(v.range.start, v.range.end))?.groups as { suffix: "1" | "a" | "A" | "i" | "I", isOrdered?: string }
             followRegex.lastIndex = 0;
             structure.sequence.push(`OrderedList-${isOrdered !== undefined ? "Ordered-" : ""}${suffix}`)
         } else {
@@ -91,6 +91,5 @@ export const indentlikeProcessor = (mark: NamuMark, props: ProcessorProps) => {
     })
     innerArray[INNER_AR].push({ range: new Range(elem.range.start, rangeEnd), data: adjacentIndentlike, structure, uuid: uuidv4() });
 
-    props.setIdx(props.idx + adjacentIndentlike.length - 1);
+    props.setIndex(props.index + adjacentIndentlike.length - 1);
 };
-

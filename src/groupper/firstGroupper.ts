@@ -1,15 +1,15 @@
-import { GroupperReturnType, ProcessorType } from ".";
-import { NamuMark } from "..";
-import { Group, HolderElem } from "../elem";
-import { commentProcessor } from "../processor/comment";
-import { escapeProcessor } from "../processor/escape";
-import { headingCloseProcessor, headingOpenProcessor } from "../processor/heading";
-import { mathtagCloseProcessor, mathtagOpenProcessor } from "../processor/mathtag";
-import { squareBracketCloseProcessor, squareBracketOpenProcessor } from "../processor/squareBracket";
-import { tripleBracketCloseProcessor, tripleBracketOpenProcessor } from "../processor/tripleBracket";
-import { Range } from "../utils";
+import { squareBracketCloseProcessor, squareBracketOpenProcessor } from "../processor/squareBracket.js";
+import { Group, HolderElem } from "../elem.js";
+import { NamuMark } from "../index.js";
+import { commentProcessor } from "../processor/comment.js";
+import { escapeProcessor } from "../processor/escape.js";
+import { tripleBracketCloseProcessor, tripleBracketOpenProcessor } from "../processor/tripleBracket.js";
+import { Range } from "range-admin";
+import { headingCloseProcessor, headingOpenProcessor } from "../processor/heading.js";
+import { mathtagCloseProcessor, mathtagOpenProcessor } from "../processor/mathtag.js";
+import { TGroupperTuple, TProcessorMap } from "./index.js";
 
-const mappedProcessor: ProcessorType = {
+const mappedProcessor: TProcessorMap = {
     Comment: [commentProcessor],
     Escape: [escapeProcessor],
     TripleBracketOpen: [tripleBracketOpenProcessor],
@@ -22,33 +22,33 @@ const mappedProcessor: ProcessorType = {
     MathTagClose: [mathtagCloseProcessor],
 };
 
-const groupper = (mark: NamuMark) => {
-    const flag = { skipFixing: false };
-    const mainGrouping = (elem: HolderElem, idx: number) => {
-        const comment = elem.group.find((v) => v.type === "Comment");
-        if (comment !== undefined) {
-            comment.elems.forEach((v) => (v.ignore = true));
-            mark.removeGroup({ group: comment });
-            flag.skipFixing = true;
+function groupper(this: NamuMark) {
+    const flag = { isImmutable: true };
+    const mainGroupping = (elem: HolderElem, index: number) => {
+        const commentGroup = elem.group.find(v => v.type === "Comment")
+        if (commentGroup !== undefined) {
+            commentGroup.elems.forEach(v => v.ignore = true);
+            this.removeGroup({ group: commentGroup });
+            flag.isImmutable = false;
             return;
         }
-
-        const doubleSquare = elem.group.find((v) => v.type === "DoubleSquareBracket");
-        if (doubleSquare !== undefined) {
+        
+        const doubleSquareGroup = elem.group.find((v) => v.type === "DoubleSquareBracket");
+        if (doubleSquareGroup !== undefined) {
             const foundGroup = elem.group.find((v) => v.type === "SingleSquareBracket");
             if (foundGroup !== undefined) {
-                mark.removeGroup({ group: foundGroup });
+                this.removeGroup({ group: foundGroup });
             }
-            if (doubleSquare.elems.length !== 4 && doubleSquare.elems.length !== 5) {
-                mark.removeGroup({ group: doubleSquare });
-                flag.skipFixing = true;
+            if (doubleSquareGroup.elems.length !== 4 && doubleSquareGroup.elems.length !== 5) {
+                this.removeGroup({ group: doubleSquareGroup });
+                flag.isImmutable = false;
                 return;
             }
-            const start = mark.holderArray.findIndex((v) => v.uuid === doubleSquare.elems[1].uuid);
-            const end = mark.holderArray.findIndex(
-                (v) => v.uuid === doubleSquare.elems[doubleSquare.elems.length === 4 /* pipe 제외 시 */ ? 2 : 3].uuid
+            const start = this.holderArray.findIndex((v) => v.uuid === doubleSquareGroup.elems[1].uuid);
+            const end = this.holderArray.findIndex(
+                (v) => v.uuid === doubleSquareGroup.elems[doubleSquareGroup.elems.length === 4 /* pipe 제외 시 */ ? 2 : 3].uuid
             );
-            const sliced = mark.holderArray
+            const sliced = this.holderArray
                 .slice(start, end + 1)
                 .toSpliced(0, 1)
                 .toSpliced(-1, 1);
@@ -70,9 +70,9 @@ const groupper = (mark: NamuMark) => {
                     sliced.slice(0, pipeIndex).filter(v => v.type !== "Newline").forEach(v => v.ignore = true);
                     const pipeHolder = sliced[pipeIndex];
                     // console.log("double")
-                    sliced.slice(pipeIndex + 1).forEach(v => v.availableRange = new Range(pipeHolder.range.end, mark.holderArray[end].range.start))
+                    sliced.slice(pipeIndex + 1).forEach(v => v.layerRange = new Range(pipeHolder.range.end, this.holderArray[end].range.start))
                 } else {
-                    flag.skipFixing = true;
+                    flag.isImmutable = false;
                 }
             } else {
                 sliced.filter(v => v.type !== "Newline").forEach(v => v.ignore = true);
@@ -81,16 +81,16 @@ const groupper = (mark: NamuMark) => {
             return;
         }
 
-        const singleSquare = elem.group.find((v) => v.type === "SingleSquareBracket");
-        if (singleSquare !== undefined) {
-            if (singleSquare.elems.length !== 2 && singleSquare.elems.length !== 4) {
-                mark.removeGroup({ group: singleSquare });
-                flag.skipFixing = true;
+        const singleSquareGroup = elem.group.find((v) => v.type === "SingleSquareBracket");
+        if (singleSquareGroup !== undefined) {
+            if (singleSquareGroup.elems.length !== 2 && singleSquareGroup.elems.length !== 4) {
+                this.removeGroup({ group: singleSquareGroup });
+                flag.isImmutable = false;
                 return;
             }
-            const start = mark.holderArray.findIndex((v) => v.uuid === singleSquare.elems[0].uuid);
-            const end = mark.holderArray.findIndex((v) => v.uuid === singleSquare.elems[singleSquare.elems.length - 1].uuid);
-            const sliced = mark.holderArray
+            const start = this.holderArray.findIndex((v) => v.uuid === singleSquareGroup.elems[0].uuid);
+            const end = this.holderArray.findIndex((v) => v.uuid === singleSquareGroup.elems[singleSquareGroup.elems.length - 1].uuid);
+            const sliced = this.holderArray
                 .slice(start, end + 1)
                 .toSpliced(0, 1)
                 .toSpliced(-1, 1);
@@ -111,16 +111,16 @@ const groupper = (mark: NamuMark) => {
                     if (v.type !== "ParenthesisOpen" && v.type !== "ParenthesisClose") v.ignore = true;
                 });
             } else {
-                flag.skipFixing = true;
+                flag.isImmutable = false;
             }
             return;
         }
 
-        const triple = elem.group.find((v) => v.type === "TripleBracket") as Group<"TripleBracket">;
-        if (triple !== undefined) {
-            if (triple.elems.length !== 2) {
-                mark.removeGroup({ group: triple });
-                flag.skipFixing = true;
+        const tripleBracketGroup = elem.group.find(v => v.type === "TripleBracket") as Group<"TripleBracket">
+        if (tripleBracketGroup !== undefined) {
+            if (tripleBracketGroup.elems.length !== 2) {
+                this.removeGroup({ group: tripleBracketGroup });
+                flag.isImmutable = false;
                 return;
             }
 
@@ -133,41 +133,41 @@ const groupper = (mark: NamuMark) => {
             const textColorRegex = new RegExp(`^#(${cssColor}|${hexCode})(?:\,#(${cssColor}|${hexCode}))?( |\n)`, "g");
             const syntaxRegex = /^#!syntax (basic|cpp|csharp|css|erlang|go|java(?:script)?|html|json|kotlin|lisp|lua|markdown|objectivec|perl|php|powershell|python|ruby|rust|sh|sql|swift|typescript|xml)/g;
 
-            const content = mark.wikiText.substring(triple.elems[0].range.end)
+            const content = this.wikiText.substring(tripleBracketGroup.elems[0].range.end)
             let match: RegExpExecArray | null;
             let ignoredRange = new Range(0, 1);
             const doMatchIgnoring = () => {
-                if (ignoredRange.end === triple.elems[1].range.start) {
-                    mark.holderArray.filter(v => v.type !== "Newline").forEach(v => {
+                if (ignoredRange.end === tripleBracketGroup.elems[1].range.start) {
+                    this.holderArray.filter(v => v.type !== "Newline").forEach(v => {
                         if (v.type !== "TripleBracketOpen" && v.range.isOverlap(ignoredRange)) {
                             v.ignore = true;
                         }
                     })
                 } else {
-                    const availableRange = new Range(ignoredRange.end, triple.elems[1].range.start);
-                    mark.holderArray.forEach(v => {
+                    const availableRange = new Range(ignoredRange.end, tripleBracketGroup.elems[1].range.start);
+                    this.holderArray.forEach(v => {
                         if (v.type !== "TripleBracketOpen" && v.type !== "Newline" && v.range.isOverlap(ignoredRange)) {
                             v.ignore = true;
                         }
                         if (v.range.isContainedIn(availableRange)) {
-                            v.availableRange = availableRange;
+                            v.layerRange = availableRange;
                         }
                     })
                 }
             }
             const doWholeIgnoring = () => {
-                const start = mark.holderArray.findIndex((v) => v.uuid === triple.elems[0].uuid);
-                const end = mark.holderArray.findIndex((v) => v.uuid === triple.elems[1].uuid);
-                const sliced = mark.holderArray
+                const start = this.holderArray.findIndex((v) => v.uuid === tripleBracketGroup.elems[0].uuid);
+                const end = this.holderArray.findIndex((v) => v.uuid === tripleBracketGroup.elems[1].uuid);
+                const sliced = this.holderArray
                     .slice(start, end + 1)
                     .toSpliced(0, 1)
                     .toSpliced(-1, 1);
                 sliced.filter(v => v.type !== "Newline").forEach((v) => (v.ignore = true));
             }
 
-            const start = mark.holderArray.findIndex(v => v.uuid === triple.elems[0].uuid);
-            const end = mark.holderArray.findIndex(v => v.uuid === triple.elems[1].uuid);
-            const sliced = mark.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1);
+            const start = this.holderArray.findIndex(v => v.uuid === tripleBracketGroup.elems[0].uuid);
+            const end = this.holderArray.findIndex(v => v.uuid === tripleBracketGroup.elems[1].uuid);
+            const sliced = this.holderArray.slice(start, end + 1).toSpliced(0, 1).toSpliced(-1, 1);
             const filteredSliced = sliced.filter(v => {
                 const heading = v.group.find(v => v.type === "Heading")
                 if (heading === undefined) {
@@ -181,91 +181,91 @@ const groupper = (mark: NamuMark) => {
             })
             if ((match = sizingRegex.exec(content)) !== null) {
                 if (filteredSliced.length === 0) {
-                    ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + sizingRegex.lastIndex)
+                    ignoredRange = new Range(tripleBracketGroup.elems[0].range.end, tripleBracketGroup.elems[0].range.end + sizingRegex.lastIndex)
                     doMatchIgnoring();
-                    triple.property = {type: "Sizing"}
+                    tripleBracketGroup.property = {type: "Sizing"}
                 } else {
-                    flag.skipFixing = true;
+                    flag.isImmutable = false;
                 }
                 return;
             }
             if ((match = wikiRegex.exec(content)) !== null) {
                 if (filteredSliced.length === 0) {
-                    ignoredRange = new Range(triple.elems[0].range.end, elem.eolRange.end - 1)
+                    ignoredRange = new Range(tripleBracketGroup.elems[0].range.end, elem.rowRange.end - 1)
                     doMatchIgnoring();
-                    triple.property = {type: "Wiki"}
+                    tripleBracketGroup.property = {type: "Wiki"}
                 } else {
-                    flag.skipFixing = true;
+                    flag.isImmutable = false;
                 }
                 return;
             }
             if ((match = htmlRegex.exec(content)) !== null) {
                 doWholeIgnoring();
-                triple.property = {type: "Html"}
+                tripleBracketGroup.property = {type: "Html"}
                 return;
             }
             if ((match = textColorRegex.exec(content)) !== null) {
                 if (filteredSliced.length === 0) {
-                    ignoredRange = new Range(triple.elems[0].range.end, triple.elems[0].range.end + textColorRegex.lastIndex)
+                    ignoredRange = new Range(tripleBracketGroup.elems[0].range.end, tripleBracketGroup.elems[0].range.end + textColorRegex.lastIndex)
                     doMatchIgnoring();
-                    triple.property = {type: "TextColor"}
+                    tripleBracketGroup.property = {type: "TextColor"}
                 } else {
-                    flag.skipFixing = true;
+                    flag.isImmutable = false;
                 }
                 return;
             }
             if ((match = syntaxRegex.exec(content)) !== null) {
                 doWholeIgnoring();
-                triple.property = {type: "Syntax"}
+                tripleBracketGroup.property = {type: "Syntax"}
                 return;
             }
             
             doWholeIgnoring();
-            triple.property = {type: "Raw"}
+            tripleBracketGroup.property = {type: "Raw"}
         }
 
-        const heading = elem.group.find((v) => v.type === "Heading");
-        if (heading !== undefined) {
-            if (heading.elems.length !== 2) {
-                mark.removeGroup({ group: heading });
-                flag.skipFixing = true;
+        const headingGroup = elem.group.find((v) => v.type === "Heading");
+        if (headingGroup !== undefined) {
+            if (headingGroup.elems.length !== 2) {
+                this.removeGroup({ group: headingGroup });
+                flag.isImmutable = false;
                 return;
             }
 
-            const start = mark.holderArray.findIndex((v) => v.uuid === heading.elems[0].uuid);
-            const end = mark.holderArray.findIndex((v) => v.uuid === heading.elems[1].uuid);
+            const start = this.holderArray.findIndex((v) => v.uuid === headingGroup.elems[0].uuid);
+            const end = this.holderArray.findIndex((v) => v.uuid === headingGroup.elems[1].uuid);
 
-            mark.holderArray.slice(0, start).filter(v => v.type !== "Newline").forEach(v => {
-                if (v.fixed === false && v.group.length > 0) {
+            this.holderArray.slice(0, start).filter(v => v.type !== "Newline").forEach(v => {
+                if (v.immutable === false && v.group.length > 0) {
                     v.ignore = true;
                 }
             })
 
-            const sliced = mark.holderArray
+            const sliced = this.holderArray
                 .slice(start, end + 1)
                 .toSpliced(0, 1)
                 .toSpliced(-1, 1);
             // console.log('heading')
-            sliced.forEach(v => v.availableRange = new Range(mark.holderArray[start].range.end, mark.holderArray[end].range.start))
+            sliced.forEach(v => v.layerRange = new Range(this.holderArray[start].range.end, this.holderArray[end].range.start))
 
             return;
         }
 
-        const mathtag = elem.group.find((v) => v.type === "MathTag");
-        if (mathtag !== undefined) {
-            if (mathtag.elems.length !== 2) {
-                mark.removeGroup({ group: mathtag });
-                flag.skipFixing = true;
+        const mathtagGroup = elem.group.find((v) => v.type === "MathTag");
+        if (mathtagGroup !== undefined) {
+            if (mathtagGroup.elems.length !== 2) {
+                this.removeGroup({ group: mathtagGroup });
+                flag.isImmutable = false;
                 return;
             }
-            const ranges = mathtag.elems.map((v) => v.range);
+            const ranges = mathtagGroup.elems.map((v) => v.range);
             ranges.forEach((range) => {
-                const filtered =mark.holderArray.filter(v => v.type === "TableArgumentOpen" || v.type === "TableArgumentClose")
+                const filtered =this.holderArray.filter(v => v.type === "TableArgumentOpen" || v.type === "TableArgumentClose")
                 filtered.filter(v => v.range.isContainedIn(range)).forEach(v => v.ignore = true);
             })
-            const start = mark.holderArray.findIndex((v) => v.uuid === mathtag.elems[0].uuid);
-            const end = mark.holderArray.findIndex((v) => v.uuid === mathtag.elems[1].uuid);
-            const sliced = mark.holderArray
+            const start = this.holderArray.findIndex((v) => v.uuid === mathtagGroup.elems[0].uuid);
+            const end = this.holderArray.findIndex((v) => v.uuid === mathtagGroup.elems[1].uuid);
+            const sliced = this.holderArray
                 .slice(start, end + 1)
                 .toSpliced(0, 1)
                 .toSpliced(-1, 1);
@@ -273,46 +273,47 @@ const groupper = (mark: NamuMark) => {
             return;
         }
 
-        const tripleContent = elem.group.find((v) => v.type === "TripleBracketContent");
-        if (tripleContent !== undefined) {
-            tripleContent.elems.forEach((v) => (v.ignore = true));
-            mark.removeGroup({ group: tripleContent });
-            flag.skipFixing = true;
+        const tripleContentGroup = elem.group.find((v) => v.type === "TripleBracketContent");
+        if (tripleContentGroup !== undefined) {
+            tripleContentGroup.elems.forEach((v) => (v.ignore = true));
+            this.removeGroup({ group: tripleContentGroup });
+            flag.isImmutable = false;
             return;
         }
 
-        const content = elem.group.find((v) => v.type === "Content");
-        if (content !== undefined) {
-            content.elems.forEach((v) => (v.ignore = true));
-            mark.removeGroup({ group: content });
-            flag.skipFixing = true;
+        const contentGroup = elem.group.find((v) => v.type === "Content");
+        if (contentGroup !== undefined) {
+            contentGroup.elems.forEach((v) => (v.ignore = true));
+            this.removeGroup({ group: contentGroup });
+            flag.isImmutable = false;
             return;
         }
     }
-    for (let idx = 0; idx < mark.holderArray.length; idx++) {
-        flag.skipFixing = false;
-        
-        mark.holderArray = mark.holderArray.filter((v) => {
+
+    for (let index = 0; index < this.holderArray.length; index++) {
+        flag.isImmutable = true;
+
+        const elem = this.holderArray[index];
+        if (elem.immutable) {
+            continue;
+        }
+
+        mainGroupping(elem, index);
+
+        if (flag.isImmutable) {
+            for (const group of elem.group) {
+                group.elems.forEach(v => v.immutable = true)
+            }
+        }
+
+        this.holderArray = this.holderArray.filter(v => {
             if (v.ignore) {
-                v.group.forEach((group) => mark.removeGroup({ group }));
+                v.group.forEach(group => this.removeGroup({ group }));
                 return false;
             }
             return true;
-        });
-        
-        const elem = mark.holderArray[idx];
-        if (elem.fixed) {
-            continue;
-        }
-        
-        mainGrouping(elem, idx);
-
-        if (!flag.skipFixing) {
-            for (const group of elem.group) {
-                group.elems.forEach((v) => (v.fixed = true));
-            }
-        }
+        })
     }
-};
+}
 
-export default [mappedProcessor, groupper] as GroupperReturnType
+export default [mappedProcessor, groupper] as TGroupperTuple
